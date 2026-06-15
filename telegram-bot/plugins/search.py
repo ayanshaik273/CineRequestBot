@@ -154,9 +154,13 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
 async def _send_to_results_channel(bot, text: str):
     """Send a message to RESULTS_CHANNEL.
 
-    On PeerIdInvalid or ValueError (bot session lost access_hash after restart),
-    re-resolve the peer via get_chat() — bots cannot use get_dialogs().
+    On PeerIdInvalid or ValueError (peer not cached after restart), re-resolve
+    using raw MTProto GetFullChannel with access_hash=0 — works for private channels
+    where the bot is admin. Bots cannot use get_dialogs().
     """
+    from pyrogram.raw.functions.channels import GetFullChannel
+    from pyrogram.raw.types import InputChannel
+
     try:
         return await bot.send_message(
             chat_id=RESULTS_CHANNEL,
@@ -164,13 +168,19 @@ async def _send_to_results_channel(bot, text: str):
             disable_web_page_preview=True,
         )
     except (PeerIdInvalid, ValueError):
-        logger.warning("Peer id invalid for RESULTS_CHANNEL — re-resolving via get_chat()")
+        logger.warning("Peer id invalid for RESULTS_CHANNEL — re-resolving via raw MTProto")
+        bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
         try:
-            await bot.get_chat(RESULTS_CHANNEL)
-            logger.info("RESULTS_CHANNEL peer re-resolved via get_chat()")
+            await bot.invoke(
+                GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
+            )
+            logger.info("RESULTS_CHANNEL peer re-resolved via raw API")
         except Exception as resolve_err:
-            logger.warning("get_chat() re-resolution failed: %s", resolve_err)
-        # Retry once — peer should be cached now
+            try:
+                await bot.get_chat(RESULTS_CHANNEL)
+            except Exception:
+                pass
+            logger.warning("Raw API re-resolution failed: %s", resolve_err)
         return await bot.send_message(
             chat_id=RESULTS_CHANNEL,
             text=text,
