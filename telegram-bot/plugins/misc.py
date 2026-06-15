@@ -1,6 +1,6 @@
 from config import LOG_CHANNEL, OWNER_ID
 from utils import script, get_groups, get_users, add_user, get_connected_channels_count
-from pyrogram import Client, filters
+from pyrogram import Client, filters, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
@@ -109,7 +109,7 @@ async def misc_cb(bot, update):
 async def pm_text(bot, message):
     content = message.text
     if content.startswith("/") or content.startswith("#"):
-        return
+        raise ContinuePropagation
     user    = message.from_user.first_name
     user_id = message.from_user.id
 
