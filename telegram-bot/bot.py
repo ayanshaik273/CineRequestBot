@@ -5,7 +5,7 @@ import signal
 import sys
 
 from pyrogram import Client
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, AuthKeyDuplicated
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION, LOG_CHANNEL, RESULTS_CHANNEL
 from database import create_indexes
 
@@ -140,8 +140,12 @@ async def _warmup_results_channel(bot):
 
 
 async def _start_user_session():
-    """Start the user session, sleeping through any FloodWait instead of crashing."""
-    from pyrogram.errors import FloodWait as _FloodWait
+    """Start the user session, sleeping through FloodWait or AuthKeyDuplicated.
+
+    AuthKeyDuplicated happens on Railway when a new deployment starts before the
+    previous instance has fully disconnected — both hold the same SESSION auth key.
+    Waiting 35 s gives the old process time to exit and Telegram to release the key.
+    """
     try:
         from client import User
         if User is None:
@@ -152,7 +156,20 @@ async def _start_user_session():
                 try:
                     await User.start()
                     break
-                except _FloodWait as e:
+                except AuthKeyDuplicated:
+                    wait = 35
+                    logger.warning(
+                        "⚠️  AUTH_KEY_DUPLICATED on user session start — "
+                        "old Railway instance still connected. "
+                        "Waiting %ds for it to fully disconnect...",
+                        wait,
+                    )
+                    try:
+                        await User.stop()
+                    except Exception:
+                        pass
+                    await asyncio.sleep(wait)
+                except FloodWait as e:
                     wait = e.value + 5
                     logger.warning(
                         "⚠️  FloodWait on user session start — waiting %ds (~%.0f min)...",
@@ -185,6 +202,12 @@ async def _session_watchdog():
                 await _start_user_session()
             else:
                 await User.get_me()
+        except AuthKeyDuplicated:
+            logger.warning(
+                "Watchdog: AUTH_KEY_DUPLICATED — waiting 35s before reconnect attempt"
+            )
+            await asyncio.sleep(35)
+            await _start_user_session()
         except FloodWait as e:
             wait = e.value + 5
             logger.warning("Watchdog FloodWait — sleeping %ds before retry", wait)
