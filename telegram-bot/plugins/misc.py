@@ -115,7 +115,10 @@ async def pm_text(bot, message):
 
     await message.reply_text(text=script.PM_REPLY)
     if LOG_CHANNEL:
-        await bot.send_message(
-            chat_id=LOG_CHANNEL,
-            text=f"<b>#𝐌𝐒𝐆\n\nNᴀᴍᴇ : {user}\n\nID : {user_id}\n\nMᴇssᴀɢᴇ : {content}</b>"
-        )
+        try:
+            await bot.send_message(
+                chat_id=LOG_CHANNEL,
+                text=f"<b>#𝐌𝐒𝐆\n\nNᴀᴍᴇ : {user}\n\nID : {user_id}\n\nMᴇssᴀɢᴇ : {content}</b>"
+            )
+        except Exception:
+            pass
