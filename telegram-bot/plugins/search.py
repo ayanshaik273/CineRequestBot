@@ -68,6 +68,7 @@ async def _search_channels(user_client, channels: list, query: str) -> list:
         try:
             async for msg in user_client.search_messages(ch_id, query=query, limit=50):
                 text = (msg.text or msg.caption or "").strip()
+                text = text.replace("", "")
                 if text:
                     results.append(text)
                     if len(results) >= 30:
