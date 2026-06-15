@@ -2,7 +2,7 @@
 
 # 🎬 CineRequestBot
 
-**A Pyrogram-based Telegram bot that delivers movie & series search results via a private results channel — Locaflix-style.**
+**A Pyrogram-based Telegram bot that delivers movie & series search results via a private results channel — Aziz style.**
 
 Users search in the group → results go to a **private channel** → group only gets a button link.  
 No movie links ever appear in the group. ✅ Copyright-safe architecture.
@@ -176,5 +176,5 @@ telegram-bot/
 ---
 
 <div align="center">
-Made with ❤️ — inspired by Locaflix architecture
+Made with ❤️ — Aziz style
 </div>
