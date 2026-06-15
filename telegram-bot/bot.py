@@ -3,7 +3,6 @@ import logging
 import os
 import signal
 import sys
-from subprocess import Popen
 
 from pyrogram import Client
 from pyrogram.errors import FloodWait
@@ -60,7 +59,7 @@ class Bot(Client):
         else:
             await _warmup_results_channel(self)
 
-        _start_autodelete_worker()
+        _start_autodelete_worker(self)
 
         from pyrogram.types import BotCommand
         await self.set_bot_commands([
@@ -182,13 +181,15 @@ async def _session_watchdog():
                 pass
 
 
-def _start_autodelete_worker():
-    try:
-        bot_dir = os.path.dirname(os.path.abspath(__file__))
-        Popen([sys.executable, "-m", "utils.delete"], cwd=bot_dir)
-        logger.info("✅ Auto-delete worker started")
-    except Exception as e:
-        logger.warning("Auto-delete worker failed to start: %s", e)
+def _start_autodelete_worker(bot):
+    """Schedule the auto-delete loop as an asyncio task using the existing bot client.
+
+    Previously this spawned a subprocess with a second Pyrogram client (same token),
+    causing AUTH_KEY_DUPLICATED and long FloodWait delays on every restart.
+    """
+    from utils.delete import run_autodelete_loop
+    asyncio.create_task(run_autodelete_loop(bot))
+    logger.info("✅ Auto-delete loop started (in-process)")
 
 
 async def _start_bot_with_flood_retry() -> "Bot":
