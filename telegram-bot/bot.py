@@ -140,13 +140,25 @@ async def _warmup_results_channel(bot):
 
 
 async def _start_user_session():
+    """Start the user session, sleeping through any FloodWait instead of crashing."""
+    from pyrogram.errors import FloodWait as _FloodWait
     try:
         from client import User
         if User is None:
             logger.error("User is None — SESSION env var is set but client failed to init")
             return
         if not User.is_connected:
-            await User.start()
+            while True:
+                try:
+                    await User.start()
+                    break
+                except _FloodWait as e:
+                    wait = e.value + 5
+                    logger.warning(
+                        "⚠️  FloodWait on user session start — waiting %ds (~%.0f min)...",
+                        wait, wait / 60,
+                    )
+                    await asyncio.sleep(wait)
         me = await User.get_me()
         logger.info("✅ User session active: @%s (id=%d)", me.username or me.first_name, me.id)
         count = 0
@@ -173,6 +185,10 @@ async def _session_watchdog():
                 await _start_user_session()
             else:
                 await User.get_me()
+        except FloodWait as e:
+            wait = e.value + 5
+            logger.warning("Watchdog FloodWait — sleeping %ds before retry", wait)
+            await asyncio.sleep(wait)
         except Exception as e:
             logger.warning("Watchdog error: %s — attempting reconnect", e)
             try:
