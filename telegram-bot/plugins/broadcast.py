@@ -194,6 +194,7 @@ async def broadcast_cb(bot, update):
                 await del_fn(chat_id)
             except Exception:
                 pass
+        await asyncio.sleep(0.05)  # ~20 msgs/sec — stay under Telegram's 30/sec hard limit
         if (i + 1) % 20 == 0:
             try:
                 await status_msg.edit(
