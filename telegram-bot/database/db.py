@@ -127,7 +127,11 @@ async def force_sub(bot, message):
     if message.from_user is None:
         return True
     try:
-        f_link = (await bot.get_chat(f_sub)).invite_link
+        # Only check membership — do NOT call get_chat() here.
+        # get_chat(f_sub) was being called on every single message even for
+        # already-subscribed users, wasting an API call per message.
+        # The invite link is only needed when the user is NOT a participant,
+        # so it's fetched lazily inside the except block below.
         member = await bot.get_chat_member(f_sub, message.from_user.id)
         if member.status == enums.ChatMemberStatus.BANNED:
             await message.reply(
@@ -139,6 +143,10 @@ async def force_sub(bot, message):
             await bot.ban_chat_member(message.chat.id, message.from_user.id)
             return False
     except UserNotParticipant:
+        try:
+            f_link = (await bot.get_chat(f_sub)).invite_link or ""
+        except Exception:
+            f_link = ""
         await bot.restrict_chat_member(
             chat_id=message.chat.id,
             user_id=message.from_user.id,
