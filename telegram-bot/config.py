@@ -25,7 +25,11 @@ else:
 
 CHANNEL        = os.environ.get("UPDATES_CHANNEL", "")
 BACKUP_CHANNEL = os.environ.get("BACKUP_CHANNEL", "")
-RESULTS_CHANNEL = int(os.environ.get("RESULTS_CHANNEL", 0))
+_rc = os.environ.get(RESULTS_CHANNEL, 0)
+try:
+    RESULTS_CHANNEL = int(_rc)          # numeric ID e.g. -1004413455841
+except ValueError:
+    RESULTS_CHANNEL = _rc               # @username e.g. @MyResultsChannel
 
 SEARCH_REPLY_TTL = int(os.environ.get("SEARCH_REPLY_TTL", 600))  # 10 mins default
 WELCOME_TTL      = 120
