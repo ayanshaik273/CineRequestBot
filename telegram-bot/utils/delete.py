@@ -14,18 +14,43 @@ from pyrogram.errors import FloodWait
 logger = logging.getLogger(__name__)
 
 
+async def _start_worker_bot() -> Client:
+    """Start the auto-delete bot client, sleeping through FloodWait instead of crashing."""
+    while True:
+        bot = Client(
+            name="auto-delete",
+            api_id=API_ID,
+            api_hash=API_HASH,
+            bot_token=BOT_TOKEN,
+            in_memory=True,
+        )
+        try:
+            await bot.start()
+            return bot
+        except FloodWait as e:
+            wait = e.value + 10
+            logger.warning(
+                "FloodWait on auto-delete worker startup — waiting %ds (~%.0f min)...",
+                wait, wait / 60,
+            )
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+            await asyncio.sleep(wait)
+        except Exception:
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+            raise
+
+
 async def run_check_up():
     while True:
         bot = None
         try:
-            bot = Client(
-                name="auto-delete",
-                api_id=API_ID,
-                api_hash=API_HASH,
-                bot_token=BOT_TOKEN,
-                in_memory=True,
-            )
-            await bot.start()
+            bot = await _start_worker_bot()
             logger.info("Auto-delete worker connected")
 
             while True:
