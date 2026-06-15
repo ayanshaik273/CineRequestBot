@@ -109,24 +109,33 @@ class Bot(Client):
 
 
 async def _warmup_results_channel(bot):
-    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it.
+    """Resolve RESULTS_CHANNEL peer on cold start via raw MTProto.
 
-    Bots cannot use get_dialogs() — only user accounts can.
-    get_chat() works for any channel the bot is admin in.
+    get_chat() fails for private channels because Pyrogram needs the access_hash
+    which is absent from a fresh in-memory session. GetFullChannel with access_hash=0
+    is accepted by Telegram when the bot is already an admin of the channel and
+    returns the real access_hash, which Pyrogram then caches automatically.
     """
+    from pyrogram.raw.functions.channels import GetFullChannel
+    from pyrogram.raw.types import InputChannel
+
+    bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
     try:
-        chat = await bot.get_chat(RESULTS_CHANNEL)
-        logger.info(
-            "✅ Results channel resolved: %s (@%s)",
-            chat.title,
-            getattr(chat, "username", "private"),
+        result = await bot.invoke(
+            GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
         )
+        title = result.chats[0].title if result.chats else str(RESULTS_CHANNEL)
+        logger.info("✅ Results channel resolved: %s", title)
     except Exception as e:
-        logger.warning(
-            "⚠️  Could not resolve RESULTS_CHANNEL %s: %s — "
-            "make sure the bot is admin with Post Messages permission.",
-            RESULTS_CHANNEL, e,
-        )
+        try:
+            chat = await bot.get_chat(RESULTS_CHANNEL)
+            logger.info("✅ Results channel resolved via get_chat: %s", chat.title)
+        except Exception as e2:
+            logger.warning(
+                "⚠️  Could not resolve RESULTS_CHANNEL %s: %s | %s — "
+                "ensure bot is admin with Post Messages permission.",
+                RESULTS_CHANNEL, e, e2,
+            )
 
 
 async def _start_user_session():
