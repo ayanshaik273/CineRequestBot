@@ -9,7 +9,7 @@ from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, PeerIdInv
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL, LOG_CHANNEL
-from database.db import get_group, force_sub, save_dlt_message, get_setting
+from database.db import get_group, force_sub, save_dlt_message, get_setting, record_failed_search
 from utils.spell import google_spell_check
 from utils.imdb import search_imdb
 
@@ -258,6 +258,10 @@ async def search(bot, message):
             reply_markup=_no_res_kb,
         )
         await _schedule_delete(bot, wait_msg, ttl)
+        try:
+            await record_failed_search(query, message.chat.id, message.chat.title or '')
+        except Exception:
+            pass
         if LOG_CHANNEL:
             try:
                 user = message.from_user
@@ -270,8 +274,8 @@ async def search(bot, message):
                     text=(
                         "#FailedSearch\n\n"
                         f"\U0001f50d Query: <code>{html.escape(query)}</code>\n"
-                        f"\U0001f465 User: {user_info} (<code>{user.id if user else "N/A"}</code>)\n"
-                        f"\U0001f4ac Group: <b>{html.escape(message.chat.title or "")}</b> "
+                        f"\U0001f465 User: {user_info} (<code>{user.id if user else 'N/A'}</code>)\n"
+                        f"\U0001f4ac Group: <b>{html.escape(message.chat.title or '')}</b> "
                         f"(<code>{message.chat.id}</code>)"
                     ),
                     disable_web_page_preview=True,
