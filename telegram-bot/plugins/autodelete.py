@@ -1,4 +1,5 @@
 from utils import get_group, update_group
+from config import SEARCH_REPLY_TTL
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -22,7 +23,7 @@ async def autodelete_cmd(bot, message):
     if message.from_user.id != group.get("user_id"):
         return await message.reply(f"Only {group.get('user_name')} can use this command.")
 
-    current = group.get("auto_delete", 60)
+    current = group.get("auto_delete", SEARCH_REPLY_TTL)
 
     args = message.command[1:]
     if args:
