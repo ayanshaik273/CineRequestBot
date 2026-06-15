@@ -94,6 +94,7 @@ def _build_page_message(query: str, page_results: list, total: int,
     )
     footer = (
         "\n" + "─" * 32 + "\n"
+        "📢 Join: https://t.me/backupchannek\n"
         f"⏳ <i>Auto-deletes in {mins} min{'s' if mins != 1 else ''}</i>"
     )
     budget = _TG_LIMIT - len(header) - len(footer) - 20
@@ -405,14 +406,7 @@ async def page_cb(bot, cb):
         await cb.message.edit(text, reply_markup=kb)
     except Exception:
         pass
-    await cb.answer()    footer = (
-        "
-" + "─" * 32 + "
-"
-        f"📢 Join: https://t.me/backupchannek
-"
-        f"⏳ <i>Auto-deletes in {mins} min{'s' if mins != 1 else ''}</i>"
-    )
+    await cb.answer()
     budget = _TG_LIMIT - len(header) - len(footer) - 20
     body_lines = []
     used = 0
