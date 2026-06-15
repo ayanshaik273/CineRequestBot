@@ -17,7 +17,16 @@ logger = logging.getLogger(__name__)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _results_link(channel_id: int, message_id: int) -> str:
+async def _results_link(bot, channel_id: int, message_id: int) -> str:
+    """Build a shareable link to a message in the results channel.
+    Uses the public username link (t.me/username/id) for public channels,
+    and the private link (t.me/c/id/msg) for private channels."""
+    try:
+        chat = await bot.get_chat(channel_id)
+        if getattr(chat, "username", None):
+            return f"https://t.me/{chat.username}/{message_id}"
+    except Exception:
+        pass
     cid = str(channel_id)
     if cid.startswith("-100"):
         cid = cid[4:]
@@ -143,7 +152,7 @@ async def search(bot, message):
         await _schedule_delete(bot, m, 30)
         return
 
-    # ── Searching indicator ───────────���───────────────────────────────────
+    # ── Searching indicator ───────────────────────────────────────────────
     wait_msg = await message.reply("🔍 <i>Searching...</i>")
 
     results = await _search_channels(User, channels, query)
@@ -185,15 +194,17 @@ async def search(bot, message):
     except Exception as e:
         logger.error("Failed to send to RESULTS_CHANNEL %s: %s", RESULTS_CHANNEL, e)
         await wait_msg.edit(
-            "❌ <b>Failed to post results.</b>\n"
-            "Make sure the bot is admin in the results channel."
+            f"❌ <b>Failed to post results.</b>\n"
+            f"<code>{type(e).__name__}: {html.escape(str(e))}</code>\n\n"
+            f"ℹ️ Make sure the bot is admin in the results channel with <b>Post Messages</b> permission, "
+            f"and that <code>RESULTS_CHANNEL={RESULTS_CHANNEL}</code> is the correct channel ID."
         )
         return
 
     await _schedule_delete(bot, sent, ttl)
 
     # ── Reply in group with button ────────────────────────────────────────
-    result_url = _results_link(RESULTS_CHANNEL, sent.id)
+    result_url = await _results_link(bot, RESULTS_CHANNEL, sent.id)
     mins_label = max(1, ttl // 60)
 
     group_reply = (
