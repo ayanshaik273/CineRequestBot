@@ -75,8 +75,9 @@ async def verify_(bot, update):
             photo="https://telegra.ph/file/a706afc296de6da2a40c8.jpg",
             caption=f"<b>ʏᴏᴜʀ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ʀᴇǫᴜᴇꜱᴛ ꜰᴏʀ {name} ʜᴀꜱ ʙᴇᴇɴ ᴀᴘᴘʀᴏᴠᴇᴅ ✅</b>",
         )
+        original = (update.message.text and update.message.text.html) or ""
         await update.message.edit(
-            update.message.text.html.replace("#NewRequest", "#Approved")
+            original.replace("#NewRequest", "#Approved") or f"#Approved — {name}"
         )
     else:
         await delete_group(group_id)
@@ -84,6 +85,7 @@ async def verify_(bot, update):
             chat_id=user,
             text=f"Your verification request for {name} has been declined 😐 Please Contact Admin"
         )
+        original = (update.message.text and update.message.text.html) or ""
         await update.message.edit(
-            update.message.text.html.replace("#NewRequest", "#Declined")
+            original.replace("#NewRequest", "#Declined") or f"#Declined — {name}"
         )
