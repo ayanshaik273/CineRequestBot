@@ -1,6 +1,6 @@
 from config import LOG_CHANNEL
 from utils import get_group, update_group
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.errors import UserNotParticipant
 from pyrogram.types import ChatPermissions
 
@@ -33,8 +33,8 @@ async def f_sub_cmd(bot, message):
         g_link     = group_chat.invite_link
     except Exception as e:
         text = (
-            f"🚫  ᴇʀʀᴏʀ  - `{str(e)}`\n\n"
-            "ᴍᴀᴋᴇ ��ᴜʀᴇ ᴛʜᴀᴛ ɪ ᴀᴍ ᴀᴅᴍɪɴ ɪɴ ᴄʜᴀɴɴᴇʟ ᴀɴᴅ ɢʀᴏᴜᴘ ᴡɪᴛʜ ᴀʟʟ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ"
+            f"🚫 ᴇʀʀᴏʀ - `{str(e)}`\n\n"
+            "ᴍᴀᴋᴇ ꜱᴜʀᴇ ᴛʜᴀᴛ ɪ ᴀᴍ ᴀᴅᴍɪɴ ɪɴ ᴄʜᴀɴɴᴇʟ ᴀɴᴅ ɢʀᴏᴜᴘ ᴡɪᴛʜ ᴀʟʟ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ"
         )
         return await m.edit(text)
 
@@ -68,7 +68,7 @@ async def nf_sub_cmd(bot, message):
     if message.from_user.id != user_id:
         return await m.edit(f"Only {user_name} can use this command 😁")
     if not verified:
-        return await m.edit("ᴛʜɪꜱ ᴄʜᴀᴛ ɪꜱ ɴᴏᴛ ᴠᴇʀɪꜰɪᴇ�� 🚫\nᴜꜱᴇ /verify")
+        return await m.edit("ᴛʜɪꜱ ᴄʜᴀᴛ ɪꜱ ɴᴏᴛ ᴠᴇʀɪꜰɪᴇᴅ 🚫\nᴜꜱᴇ /verify")
     if not f_sub:
         return await m.edit("ᴛʜɪꜱ ᴄʜᴀᴛ ᴅᴏᴇꜱ ɴᴏᴛ ʜᴀᴠᴇ ᴀɴʏ ꜰᴏʀᴄᴇ ꜱᴜʙ\nᴜꜱᴇ /fsub")
 
@@ -79,7 +79,7 @@ async def nf_sub_cmd(bot, message):
         g_link     = group_chat.invite_link
     except Exception as e:
         text = (
-            f"🚫  ᴇʀʀᴏʀ  - `{str(e)}`\n\n"
+            f"🚫 ᴇʀʀᴏʀ - `{str(e)}`\n\n"
             "ᴍᴀᴋᴇ ꜱᴜʀᴇ ᴛʜᴀᴛ ɪ ᴀᴍ ᴀᴅᴍɪɴ ɪɴ ᴄʜᴀɴɴᴇʟ ᴀɴᴅ ɢʀᴏᴜᴘ ᴡɪᴛʜ ᴀʟʟ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ"
         )
         return await m.edit(text)
@@ -105,13 +105,19 @@ async def f_sub_callback(bot, update):
     group   = await get_group(update.message.chat.id)
     if not group:
         return
-    f_sub = group["f_sub"]
+    f_sub = group.get("f_sub")
+    if not f_sub:
+        return await update.answer("Force-sub is no longer active.", show_alert=True)
 
     if update.from_user.id != user_id:
         return await update.answer("ᴛʜɪꜱ  ɪꜱ  ɴᴏᴛ  ꜰᴏʀ  ʏᴏᴜ  😊", show_alert=True)
 
     try:
-        await bot.get_chat_member(f_sub, user_id)
+        member = await bot.get_chat_member(f_sub, user_id)
+        if member.status == enums.ChatMemberStatus.BANNED:
+            return await update.answer(
+                "ʏᴏᴜ ᴀʀᴇ ʙᴀɴɴᴇᴅ ꜰʀᴏᴍ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ.", show_alert=True
+            )
     except UserNotParticipant:
         return await update.answer(
             "ꜰɪʀꜱᴛ ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇ ᴄʜᴀɴɴᴇʟ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ᴛʜɪꜱ ʙᴜᴛᴛᴏɴ",
@@ -120,13 +126,22 @@ async def f_sub_callback(bot, update):
     except Exception:
         pass
 
-    await bot.restrict_chat_member(
-        chat_id=update.message.chat.id,
-        user_id=user_id,
-        permissions=ChatPermissions(
-            can_send_messages=True,
-            can_send_media_messages=True,
-            can_send_other_messages=True,
+    try:
+        await bot.restrict_chat_member(
+            chat_id=update.message.chat.id,
+            user_id=user_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+            )
         )
-    )
-    await update.message.delete()
+    except Exception:
+        pass
+
+    await update.answer("✅ ᴡᴇʟᴄᴏᴍᴇ! ʏᴏᴜ ᴄᴀɴ ɴᴏᴡ ꜱᴇɴᴅ ᴍᴇꜱꜱᴀɢᴇꜱ.", show_alert=True)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
