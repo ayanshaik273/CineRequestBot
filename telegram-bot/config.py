@@ -70,5 +70,5 @@ def _normalise_session(s: str) -> str:
     return _convert_custom_session(raw)
 
 
-_raw_session = os.environ.get("SESSION") or os.environ.get("SESSION_SECRET", "")
+_raw_session = os.environ.get("SESSION", "")
 SESSION = _normalise_session(_raw_session)
