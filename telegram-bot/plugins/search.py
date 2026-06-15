@@ -209,6 +209,14 @@ async def search(bot, message):
     # ── Send results to RESULTS_CHANNEL ──────────────────────────────────
     results_text = _build_results_message(query, results, ttl_secs=ttl)
 
+    # Ensure the results channel peer is cached before sending.
+    # On Railway the bot uses an in-memory session, so the peer cache is lost
+    # on every restart — this re-resolves it on demand before each send.
+    try:
+        await bot.get_chat(RESULTS_CHANNEL)
+    except Exception as e:
+        logger.warning("Could not pre-resolve RESULTS_CHANNEL peer: %s", e)
+
     try:
         sent = await bot.send_message(
             chat_id=RESULTS_CHANNEL,
