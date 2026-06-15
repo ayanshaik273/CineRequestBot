@@ -79,6 +79,7 @@ class Bot(Client):
             BotCommand("nofsub",      "Remove force-subscribe"),
             BotCommand("autodelete",  "Set result auto-delete timer"),
             BotCommand("ping",        "Check bot speed"),
+            BotCommand("setbackup",   "Update backup channel link (owner only)"),
             BotCommand("help",        "Show all commands"),
         ])
 
