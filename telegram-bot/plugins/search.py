@@ -154,9 +154,8 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
 async def _send_to_results_channel(bot, text: str):
     """Send a message to RESULTS_CHANNEL.
 
-    On PeerIdInvalid (in-memory session lost access_hash after restart/reconnect),
-    force-resolve the peer by scanning all dialogs, then retry once.
-    This is more reliable than a pre-resolve warmup that may not survive reconnections.
+    On PeerIdInvalid or ValueError (bot session lost access_hash after restart),
+    re-resolve the peer via get_chat() — bots cannot use get_dialogs().
     """
     try:
         return await bot.send_message(
@@ -165,16 +164,13 @@ async def _send_to_results_channel(bot, text: str):
             disable_web_page_preview=True,
         )
     except (PeerIdInvalid, ValueError):
-        logger.warning("PeerIdInvalid for RESULTS_CHANNEL — rescanning dialogs to re-resolve peer")
+        logger.warning("Peer id invalid for RESULTS_CHANNEL — re-resolving via get_chat()")
         try:
-            async for dialog in bot.get_dialogs():
-                if dialog.chat.id == RESULTS_CHANNEL:
-                    logger.info("RESULTS_CHANNEL peer re-resolved via dialogs scan")
-                    break
-        except Exception as scan_err:
-            logger.warning("Dialog scan failed during peer re-resolution: %s", scan_err)
-        # Retry — if the scan found the peer it's now cached; otherwise this will
-        # raise a descriptive exception that the caller can surface to the user.
+            await bot.get_chat(RESULTS_CHANNEL)
+            logger.info("RESULTS_CHANNEL peer re-resolved via get_chat()")
+        except Exception as resolve_err:
+            logger.warning("get_chat() re-resolution failed: %s", resolve_err)
+        # Retry once — peer should be cached now
         return await bot.send_message(
             chat_id=RESULTS_CHANNEL,
             text=text,
