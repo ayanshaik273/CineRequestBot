@@ -164,7 +164,7 @@ async def _send_to_results_channel(bot, text: str):
             text=text,
             disable_web_page_preview=True,
         )
-    except PeerIdInvalid:
+    except (PeerIdInvalid, ValueError):
         logger.warning("PeerIdInvalid for RESULTS_CHANNEL — rescanning dialogs to re-resolve peer")
         try:
             async for dialog in bot.get_dialogs():
