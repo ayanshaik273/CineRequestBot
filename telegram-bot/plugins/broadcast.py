@@ -19,41 +19,41 @@ def _prune_pending():
 
 
 async def _send_to_user(bot, from_chat_id: int, message_id: int, chat_id: int) -> bool:
-    """Send via the bot token client explicitly."""
-    try:
-        await bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=from_chat_id,
-            message_id=message_id,
-        )
-        return True
-    except FloodWait as e:
-        await asyncio.sleep(e.value + 1)
-        return await _send_to_user(bot, from_chat_id, message_id, chat_id)
-    except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
-        return False
-    except Exception:
-        return False
+    """Send via the bot token client — loop on FloodWait instead of recursing."""
+    while True:
+        try:
+            await bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=from_chat_id,
+                message_id=message_id,
+            )
+            return True
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 1)
+        except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
+            return False
+        except Exception:
+            return False
 
 
 async def _send_to_group(bot, from_chat_id: int, message_id: int, chat_id: int) -> bool:
-    """Send to group via the bot token client, then try to pin."""
-    try:
-        sent = await bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=from_chat_id,
-            message_id=message_id,
-        )
+    """Send to group via the bot token client, then try to pin — loop on FloodWait."""
+    while True:
         try:
-            await bot.pin_chat_message(chat_id, sent.id, disable_notification=True)
+            sent = await bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=from_chat_id,
+                message_id=message_id,
+            )
+            try:
+                await bot.pin_chat_message(chat_id, sent.id, disable_notification=True)
+            except Exception:
+                pass
+            return True
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 1)
         except Exception:
-            pass
-        return True
-    except FloodWait as e:
-        await asyncio.sleep(e.value + 1)
-        return await _send_to_group(bot, from_chat_id, message_id, chat_id)
-    except Exception:
-        return False
+            return False
 
 
 def _estimate(count: int) -> str:
