@@ -9,7 +9,7 @@ from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, PeerIdInv
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION
+from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL
 from database.db import get_group, force_sub, save_dlt_message
 from utils.spell import google_spell_check
 from utils.imdb import search_imdb
@@ -294,9 +294,15 @@ async def search(bot, message):
         if imdb_hits:
             imdb_text = "\n\n<b>Did you mean:</b>\n"
             imdb_text += "\n".join(f"• {html.escape(h['title'])}" for h in imdb_hits[:5])
+        _no_res_kb = None
+        if BACKUP_CHANNEL:
+            _no_res_kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("📩 Request Here", url=BACKUP_CHANNEL)
+            ]])
         await wait_msg.edit(
             f"❌ <b>No results found for:</b> <i>{html.escape(query)}</i>"
-            f"{imdb_text}\n\n<b>Please request the group admin 👇</b>"
+            f"{imdb_text}\n\n<b>Please request the group admin 👇</b>",
+            reply_markup=_no_res_kb,
         )
         await _schedule_delete(bot, wait_msg, ttl)
         return
