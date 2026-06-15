@@ -104,7 +104,13 @@ class Bot(Client):
 
 
 async def _warmup_results_channel(bot):
-    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send."""
+    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send.
+
+    get_chat(numeric_id) only works if the access_hash is already cached.
+    On in-memory sessions it never is, so we fall back to iterating get_dialogs()
+    which always fetches fresh peer data from Telegram.
+    """
+    # First attempt: fast path (works if peer is already cached)
     try:
         chat = await bot.get_chat(RESULTS_CHANNEL)
         logger.info(
@@ -112,12 +118,26 @@ async def _warmup_results_channel(bot):
             chat.title,
             getattr(chat, "username", "private"),
         )
-    except Exception as e:
+        return
+    except Exception:
+        pass
+
+    # Fallback: iterate dialogs until we find and cache the results channel
+    logger.info("⏳ Warming up RESULTS_CHANNEL peer via dialogs scan...")
+    try:
+        async for dialog in bot.get_dialogs():
+            if dialog.chat.id == RESULTS_CHANNEL:
+                logger.info(
+                    "✅ Results channel found via dialogs: %s", dialog.chat.title
+                )
+                return
         logger.warning(
-            "⚠️  Could not resolve RESULTS_CHANNEL %s: %s — "
-            "make sure the bot is admin in that channel before starting.",
-            RESULTS_CHANNEL, e,
+            "⚠️  RESULTS_CHANNEL %s not found in bot dialogs — "
+            "make sure the bot is admin in that channel.",
+            RESULTS_CHANNEL,
         )
+    except Exception as e:
+        logger.warning("⚠️  Dialog scan failed: %s", e)
 
 
 async def _start_user_session():
