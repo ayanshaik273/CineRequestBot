@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, PeerIdInvalid
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL
+from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL, LOG_CHANNEL
 from database.db import get_group, force_sub, save_dlt_message, get_setting
 from utils.spell import google_spell_check
 from utils.imdb import search_imdb
@@ -258,6 +258,26 @@ async def search(bot, message):
             reply_markup=_no_res_kb,
         )
         await _schedule_delete(bot, wait_msg, ttl)
+        if LOG_CHANNEL:
+            try:
+                user = message.from_user
+                user_info = (
+                    f"[{html.escape(user.first_name)}](tg://user?id={user.id})"
+                    if user else "Unknown"
+                )
+                await bot.send_message(
+                    chat_id=LOG_CHANNEL,
+                    text=(
+                        "#FailedSearch\n\n"
+                        f"\U0001f50d Query: <code>{html.escape(query)}</code>\n"
+                        f"\U0001f465 User: {user_info} (<code>{user.id if user else "N/A"}</code>)\n"
+                        f"\U0001f4ac Group: <b>{html.escape(message.chat.title or "")}</b> "
+                        f"(<code>{message.chat.id}</code>)"
+                    ),
+                    disable_web_page_preview=True,
+                )
+            except Exception:
+                pass
         return
 
     total = len(results)
