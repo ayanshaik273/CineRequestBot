@@ -5,7 +5,7 @@ import signal
 import sys
 
 from pyrogram import Client
-from pyrogram.errors import FloodWait, AuthKeyDuplicated
+from pyrogram.errors import FloodWait
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION, LOG_CHANNEL, RESULTS_CHANNEL
 from database import create_indexes
 
@@ -15,6 +15,12 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
+
+
+def _is_auth_key_duplicated(exc: Exception) -> bool:
+    """Check if an exception is AUTH_KEY_DUPLICATED without relying on a specific
+    Pyrogram exception class — the class name varies across Pyrogram versions."""
+    return "AUTH_KEY_DUPLICATED" in str(exc)
 
 
 def _session_name():
@@ -103,13 +109,7 @@ class Bot(Client):
 
 
 async def _warmup_results_channel(bot):
-    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send.
-
-    get_chat(numeric_id) only works if the access_hash is already cached.
-    On in-memory sessions it never is, so we fall back to iterating get_dialogs()
-    which always fetches fresh peer data from Telegram.
-    """
-    # First attempt: fast path (works if peer is already cached)
+    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send."""
     try:
         chat = await bot.get_chat(RESULTS_CHANNEL)
         logger.info(
@@ -121,14 +121,11 @@ async def _warmup_results_channel(bot):
     except Exception:
         pass
 
-    # Fallback: iterate dialogs until we find and cache the results channel
     logger.info("⏳ Warming up RESULTS_CHANNEL peer via dialogs scan...")
     try:
         async for dialog in bot.get_dialogs():
             if dialog.chat.id == RESULTS_CHANNEL:
-                logger.info(
-                    "✅ Results channel found via dialogs: %s", dialog.chat.title
-                )
+                logger.info("✅ Results channel found via dialogs: %s", dialog.chat.title)
                 return
         logger.warning(
             "⚠️  RESULTS_CHANNEL %s not found in bot dialogs — "
@@ -140,11 +137,11 @@ async def _warmup_results_channel(bot):
 
 
 async def _start_user_session():
-    """Start the user session, sleeping through FloodWait or AuthKeyDuplicated.
+    """Start the user session, retrying through FloodWait or AUTH_KEY_DUPLICATED.
 
-    AuthKeyDuplicated happens on Railway when a new deployment starts before the
-    previous instance has fully disconnected — both hold the same SESSION auth key.
-    Waiting 35 s gives the old process time to exit and Telegram to release the key.
+    AUTH_KEY_DUPLICATED happens on Railway when a new deployment starts before the
+    previous instance has fully disconnected. Waiting 35 s gives the old process time
+    to exit and Telegram to release the auth key.
     """
     try:
         from client import User
@@ -156,26 +153,29 @@ async def _start_user_session():
                 try:
                     await User.start()
                     break
-                except AuthKeyDuplicated:
-                    wait = 35
-                    logger.warning(
-                        "⚠️  AUTH_KEY_DUPLICATED on user session start — "
-                        "old Railway instance still connected. "
-                        "Waiting %ds for it to fully disconnect...",
-                        wait,
-                    )
-                    try:
-                        await User.stop()
-                    except Exception:
-                        pass
-                    await asyncio.sleep(wait)
-                except FloodWait as e:
-                    wait = e.value + 5
-                    logger.warning(
-                        "⚠️  FloodWait on user session start — waiting %ds (~%.0f min)...",
-                        wait, wait / 60,
-                    )
-                    await asyncio.sleep(wait)
+                except Exception as e:
+                    if _is_auth_key_duplicated(e):
+                        wait = 35
+                        logger.warning(
+                            "⚠️  AUTH_KEY_DUPLICATED on user session — "
+                            "old Railway instance still connected. "
+                            "Waiting %ds for it to disconnect...",
+                            wait,
+                        )
+                        try:
+                            await User.stop()
+                        except Exception:
+                            pass
+                        await asyncio.sleep(wait)
+                    elif isinstance(e, FloodWait):
+                        wait = e.value + 5
+                        logger.warning(
+                            "⚠️  FloodWait on user session start — waiting %ds (~%.0f min)...",
+                            wait, wait / 60,
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        raise
         me = await User.get_me()
         logger.info("✅ User session active: @%s (id=%d)", me.username or me.first_name, me.id)
         count = 0
@@ -202,18 +202,16 @@ async def _session_watchdog():
                 await _start_user_session()
             else:
                 await User.get_me()
-        except AuthKeyDuplicated:
-            logger.warning(
-                "Watchdog: AUTH_KEY_DUPLICATED — waiting 35s before reconnect attempt"
-            )
-            await asyncio.sleep(35)
-            await _start_user_session()
         except FloodWait as e:
             wait = e.value + 5
             logger.warning("Watchdog FloodWait — sleeping %ds before retry", wait)
             await asyncio.sleep(wait)
         except Exception as e:
-            logger.warning("Watchdog error: %s — attempting reconnect", e)
+            if _is_auth_key_duplicated(e):
+                logger.warning("Watchdog: AUTH_KEY_DUPLICATED — waiting 35s before reconnect")
+                await asyncio.sleep(35)
+            else:
+                logger.warning("Watchdog error: %s — attempting reconnect", e)
             try:
                 await _start_user_session()
             except Exception:
@@ -221,11 +219,6 @@ async def _session_watchdog():
 
 
 def _start_autodelete_worker(bot):
-    """Schedule the auto-delete loop as an asyncio task using the existing bot client.
-
-    Previously this spawned a subprocess with a second Pyrogram client (same token),
-    causing AUTH_KEY_DUPLICATED and long FloodWait delays on every restart.
-    """
     from utils.delete import run_autodelete_loop
     asyncio.create_task(run_autodelete_loop(bot))
     logger.info("✅ Auto-delete loop started (in-process)")
