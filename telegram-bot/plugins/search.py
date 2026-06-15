@@ -1,0 +1,209 @@
+import asyncio
+import html
+import logging
+from time import time
+
+from pyrogram import Client, filters
+from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION
+from database.db import get_group, force_sub, save_dlt_message
+from utils.spell import google_spell_check
+from utils.imdb import search_imdb
+
+logger = logging.getLogger(__name__)
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _results_link(channel_id: int, message_id: int) -> str:
+    cid = str(channel_id)
+    if cid.startswith("-100"):
+        cid = cid[4:]
+    return f"https://t.me/c/{cid}/{message_id}"
+
+
+async def _schedule_delete(bot, message, ttl: int):
+    try:
+        await save_dlt_message(message, int(time()) + ttl)
+    except Exception as e:
+        logger.debug("save_dlt_message: %s", e)
+
+
+async def _search_channels(user_client, channels: list, query: str) -> list:
+    """Search connected channels via user session. Returns list of message texts."""
+    results = []
+    q = query.lower()
+    for ch_id in channels:
+        try:
+            async for msg in user_client.search_messages(ch_id, query=query, limit=50):
+                text = (msg.text or msg.caption or "").strip()
+                if text and q in text.lower():
+                    results.append(text)
+                    if len(results) >= 30:
+                        return results
+        except (ChannelInvalid, ChannelPrivate):
+            logger.debug("Channel %s invalid/private — skipping", ch_id)
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+        except Exception as e:
+            logger.debug("Search error ch=%s: %s", ch_id, e)
+    return results
+
+
+def _build_results_message(query: str, results: list, ttl_secs: int,
+                            page: int = 1, total_pages: int = 1) -> str:
+    mins = max(1, ttl_secs // 60)
+    lines = [
+        f"🔍 <b>Search:</b> {html.escape(query)}",
+        f"📄 <b>Page:</b> {page}/{total_pages}",
+        f"📊 <b>Total Results:</b> {len(results)}",
+        "",
+    ]
+    for i, text in enumerate(results, 1):
+        safe = html.escape(text[:800])
+        lines.append(f"<b>{i}.</b> {safe}")
+        lines.append("")
+
+    lines += [
+        "─" * 32,
+        f"⏳ <b>Results auto-delete in {mins} min{'s' if mins != 1 else ''}</b>",
+    ]
+    return "\n".join(lines)
+
+
+# ── main search handler ────────────────────────────────────────────────────────
+
+@Client.on_message(
+    filters.text
+    & filters.group
+    & filters.incoming
+    & ~filters.via_bot
+    & ~filters.bot
+    & ~filters.command([
+        "start", "help", "about", "id", "verify", "connect", "disconnect",
+        "connections", "fsub", "nofsub", "autodelete", "broadcast",
+        "broadcast_groups", "ping", "stats",
+    ])
+)
+async def search(bot, message):
+    if not message.text or not message.text.strip():
+        return
+
+    query = message.text.strip()
+    if len(query) < 2 or len(query) > 100:
+        return
+
+    # ── Load group config ─────────────────────────────────────────────────
+    group = await get_group(message.chat.id)
+    if not group or not group.get("verified"):
+        return
+
+    # ── Force subscribe check ─────────────────────────────────────────────
+    if not await force_sub(bot, message):
+        return
+
+    channels = group.get("channels", [])
+    if not channels:
+        m = await message.reply(
+            "⚠️ <b>No channels connected yet.</b>\n"
+            "Ask the group admin to use /connect to link channels first."
+        )
+        await _schedule_delete(bot, m, 60)
+        return
+
+    # ── Pre-flight checks ─────────────────────────────────────────────────
+    if not RESULTS_CHANNEL:
+        m = await message.reply(
+            "⚠️ <b>Results channel not configured.</b> Contact the bot owner."
+        )
+        await _schedule_delete(bot, m, 60)
+        return
+
+    if not SESSION:
+        m = await message.reply(
+            "⚠️ <b>Search session not configured.</b> Contact the bot owner."
+        )
+        await _schedule_delete(bot, m, 60)
+        return
+
+    # ── Connect user session ──────────────────────────────────────────────
+    try:
+        from client import User
+        if User is None:
+            raise RuntimeError("User session is not configured (SESSION env var missing)")
+        if not User.is_connected:
+            await User.start()
+    except Exception as e:
+        logger.warning("User session unavailable: %s", e)
+        m = await message.reply(
+            "⚠️ <b>Search is temporarily unavailable.</b> Try again in a moment."
+        )
+        await _schedule_delete(bot, m, 30)
+        return
+
+    # ── Searching indicator ───────────���───────────────────────────────────
+    wait_msg = await message.reply("🔍 <i>Searching...</i>")
+
+    results = await _search_channels(User, channels, query)
+    ttl = group.get("auto_delete", SEARCH_REPLY_TTL)
+
+    # ── No results — try spell correction ─────────────────────────────────
+    if not results:
+        corrected = await google_spell_check(query)
+        if corrected and corrected.lower() != query.lower():
+            results = await _search_channels(User, channels, corrected)
+            if results:
+                query = corrected
+
+    # ── Still no results — show fallback ─────────────────────────────────
+    if not results:
+        imdb_hits = await search_imdb(query)
+        imdb_text = ""
+        if imdb_hits:
+            imdb_text = "\n\n<b>Did you mean:</b>\n"
+            imdb_text += "\n".join(
+                f"• {html.escape(h['title'])}" for h in imdb_hits[:5]
+            )
+        await wait_msg.edit(
+            f"❌ <b>No results found for:</b> <i>{html.escape(query)}</i>"
+            f"{imdb_text}\n\n<b>Please request the group admin 👇</b>"
+        )
+        await _schedule_delete(bot, wait_msg, ttl)
+        return
+
+    # ── Send results to RESULTS_CHANNEL ──────────────────────────────────
+    results_text = _build_results_message(query, results, ttl_secs=ttl)
+
+    try:
+        sent = await bot.send_message(
+            chat_id=RESULTS_CHANNEL,
+            text=results_text,
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.error("Failed to send to RESULTS_CHANNEL %s: %s", RESULTS_CHANNEL, e)
+        await wait_msg.edit(
+            "❌ <b>Failed to post results.</b>\n"
+            "Make sure the bot is admin in the results channel."
+        )
+        return
+
+    await _schedule_delete(bot, sent, ttl)
+
+    # ── Reply in group with button ────────────────────────────────────────
+    result_url = _results_link(RESULTS_CHANNEL, sent.id)
+    mins_label = max(1, ttl // 60)
+
+    group_reply = (
+        f"✅ <b>Found {len(results)} result{'s' if len(results) != 1 else ''} in Channel.</b>\n"
+        f"Page 1/1\n"
+        f"<i>(Results auto-delete in {mins_label} min{'s' if mins_label != 1 else ''})</i>"
+    )
+    reply_kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🎬 Click here to Get movie/Series", url=result_url),
+    ]])
+
+    await wait_msg.edit(group_reply, reply_markup=reply_kb)
+    await _schedule_delete(bot, wait_msg, ttl)
