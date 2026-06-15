@@ -99,14 +99,19 @@ def _build_page_message(query: str, page_results: list, total: int,
     body_lines = []
     used = 0
     for i, text in enumerate(page_results, offset + 1):
-        snippet = html.escape(text[:300])
-        if len(text) > 300:
-            snippet += "…"
-        entry = f"<b>{i}.</b> {snippet}\n\n"
-        if used + len(entry) > budget:
+        full = html.escape(text)
+        remaining = budget - used
+        if remaining <= 10 and used > 0:
             break
+        if len(full) <= remaining - 10:
+            snippet = full
+        else:
+            snippet = full[:max(remaining - 1, 50)] + "…"
+        entry = f"<b>{i}.</b> {snippet}\n\n"
         body_lines.append(entry)
         used += len(entry)
+        if used >= budget:
+            break
     return header + "".join(body_lines) + footer
 
 
