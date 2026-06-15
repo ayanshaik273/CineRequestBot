@@ -6,6 +6,7 @@ import sys
 from subprocess import Popen
 
 from pyrogram import Client
+from pyrogram.errors import FloodWait
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION, LOG_CHANNEL, RESULTS_CHANNEL
 from database import create_indexes
 
@@ -170,12 +171,37 @@ def _start_autodelete_worker():
         logger.warning("Auto-delete worker failed to start: %s", e)
 
 
+async def _start_bot_with_flood_retry() -> "Bot":
+    """Start the bot, sleeping through any FloodWait on auth instead of crashing."""
+    while True:
+        bot = Bot()
+        try:
+            await bot.start()
+            return bot
+        except FloodWait as e:
+            wait = e.value + 10
+            logger.warning(
+                "⚠️  Telegram FloodWait on bot authorization — waiting %d seconds (~%.0f min) before retry...",
+                wait, wait / 60,
+            )
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+            await asyncio.sleep(wait)
+        except Exception:
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+            raise
+
+
 async def main():
     from health import start_health_server
     start_health_server()
 
-    bot = Bot()
-    await bot.start()
+    bot = await _start_bot_with_flood_retry()
 
     watchdog = asyncio.create_task(_session_watchdog())
     stop_event = asyncio.Event()
