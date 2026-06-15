@@ -14,6 +14,9 @@ from utils.imdb import search_imdb
 
 logger = logging.getLogger(__name__)
 
+# Telegram hard limit for text messages
+_TG_LIMIT = 4096
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,23 +66,44 @@ async def _search_channels(user_client, channels: list, query: str) -> list:
 
 def _build_results_message(query: str, results: list, ttl_secs: int,
                             page: int = 1, total_pages: int = 1) -> str:
+    """Build the results message, guaranteed to stay within Telegram's 4096-char limit."""
     mins = max(1, ttl_secs // 60)
-    lines = [
-        f"🔍 <b>Search:</b> {html.escape(query)}",
-        f"📄 <b>Page:</b> {page}/{total_pages}",
-        f"📊 <b>Total Results:</b> {len(results)}",
-        "",
-    ]
-    for i, text in enumerate(results, 1):
-        safe = html.escape(text[:800])
-        lines.append(f"<b>{i}.</b> {safe}")
-        lines.append("")
+    footer = (
+        "\n" + "─" * 32 + "\n"
+        + f"⏳ <b>Results auto-delete in {mins} min{'s' if mins != 1 else ''}</b>"
+    )
+    header = (
+        f"🔍 <b>Search:</b> {html.escape(query)}\n"
+        f"📄 <b>Page:</b> {page}/{total_pages}\n"
+        f"📊 <b>Total Results:</b> {len(results)}\n\n"
+    )
 
-    lines += [
-        "─" * 32,
-        f"⏳ <b>Results auto-delete in {mins} min{'s' if mins != 1 else ''}</b>",
-    ]
-    return "\n".join(lines)
+    # Budget: total limit minus header and footer
+    budget = _TG_LIMIT - len(header) - len(footer) - 20  # 20 chars safety margin
+
+    body_lines = []
+    used = 0
+    shown = 0
+    for i, text in enumerate(results, 1):
+        # Truncate individual result to 250 chars to keep things readable
+        snippet = html.escape(text[:250])
+        if len(text) > 250:
+            snippet += "…"
+        entry = f"<b>{i}.</b> {snippet}\n\n"
+        if used + len(entry) > budget:
+            # No more room — note how many were cut
+            remaining = len(results) - shown
+            if remaining > 0:
+                body_lines.append(
+                    f"<i>… and {remaining} more result{'s' if remaining != 1 else ''} "
+                    f"(use a more specific query to narrow down)</i>"
+                )
+            break
+        body_lines.append(entry)
+        used += len(entry)
+        shown += 1
+
+    return header + "".join(body_lines) + footer
 
 
 # ── main search handler ────────────────────────────────────────────────────────
