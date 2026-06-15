@@ -97,9 +97,9 @@ _GEN_HTML = """<!DOCTYPE html>
     <div class="result" id="sess"></div>
     <button class="copy-btn" onclick="copy()">&#128203; Copy to Clipboard</button>
     <div class="note">
-      Add this as an environment variable:<br>
-      <b>Key:</b> SESSION_SECRET &nbsp;|&nbsp; <b>Value:</b> the string above<br><br>
-      On Railway: service → Variables → New Variable.<br>
+      Add this as an environment variable on Railway:<br>
+      <b>Key:</b> SESSION &nbsp;|&nbsp; <b>Value:</b> the string above<br><br>
+      Go to: service &#8594; Variables &#8594; New Variable<br>
       Then redeploy &#8212; search will be fully active.
     </div>
   </div>
@@ -173,12 +173,13 @@ def gen_send():
 
     async def _do():
         global _pyro_client
-        from pyrogram import Client as PyroClient
         if _pyro_client:
             try:
                 await _pyro_client.disconnect()
             except Exception:
                 pass
+            _pyro_client = None
+        from pyrogram import Client as PyroClient
         _pyro_client = PyroClient(
             "_sess_gen", api_id=API_ID, api_hash=API_HASH, in_memory=True
         )
@@ -202,12 +203,19 @@ def gen_signin():
         return jsonify({"ok": False, "error": "Code required"})
 
     async def _do():
+        global _pyro_client
         from pyrogram.errors import SessionPasswordNeeded
         try:
             await _pyro_client.sign_in(_state["phone"], _state["hash"], code)
         except SessionPasswordNeeded:
             return None, True
         s = await _pyro_client.export_session_string()
+        # Disconnect cleanly — session string is already captured above
+        try:
+            await _pyro_client.disconnect()
+        except Exception:
+            pass
+        _pyro_client = None
         return s, False
 
     try:
@@ -231,8 +239,16 @@ def gen_2fa():
         return jsonify({"ok": False, "error": "Password required"})
 
     async def _do():
+        global _pyro_client
         await _pyro_client.check_password(pwd)
-        return await _pyro_client.export_session_string()
+        s = await _pyro_client.export_session_string()
+        # Disconnect cleanly — session string is already captured above
+        try:
+            await _pyro_client.disconnect()
+        except Exception:
+            pass
+        _pyro_client = None
+        return s
 
     try:
         session = run_async(_do())
