@@ -109,33 +109,36 @@ class Bot(Client):
 
 
 async def _warmup_results_channel(bot):
-    """Resolve RESULTS_CHANNEL peer on cold start via raw MTProto.
+    """Resolve RESULTS_CHANNEL peer on cold start.
 
-    get_chat() fails for private channels because Pyrogram needs the access_hash
-    which is absent from a fresh in-memory session. GetFullChannel with access_hash=0
-    is accepted by Telegram when the bot is already an admin of the channel and
-    returns the real access_hash, which Pyrogram then caches automatically.
+    If RESULTS_CHANNEL is a @username string, get_chat() resolves it instantly.
+    If it is a numeric ID (int), try raw MTProto GetFullChannel(access_hash=0)
+    which Telegram accepts when the bot is admin, then fall back to get_chat().
     """
-    from pyrogram.raw.functions.channels import GetFullChannel
-    from pyrogram.raw.types import InputChannel
-
-    bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
     try:
-        result = await bot.invoke(
-            GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
-        )
-        title = result.chats[0].title if result.chats else str(RESULTS_CHANNEL)
-        logger.info("✅ Results channel resolved: %s", title)
-    except Exception as e:
-        try:
+        if isinstance(RESULTS_CHANNEL, str):
+            # Public channel username — always resolvable without access_hash
             chat = await bot.get_chat(RESULTS_CHANNEL)
-            logger.info("✅ Results channel resolved via get_chat: %s", chat.title)
-        except Exception as e2:
-            logger.warning(
-                "⚠️  Could not resolve RESULTS_CHANNEL %s: %s | %s — "
-                "ensure bot is admin with Post Messages permission.",
-                RESULTS_CHANNEL, e, e2,
-            )
+            logger.info("✅ Results channel resolved: %s", chat.title)
+        else:
+            from pyrogram.raw.functions.channels import GetFullChannel
+            from pyrogram.raw.types import InputChannel
+            bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
+            try:
+                result = await bot.invoke(
+                    GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
+                )
+                title = result.chats[0].title if result.chats else str(RESULTS_CHANNEL)
+                logger.info("✅ Results channel resolved via raw API: %s", title)
+            except Exception:
+                chat = await bot.get_chat(RESULTS_CHANNEL)
+                logger.info("✅ Results channel resolved via get_chat: %s", chat.title)
+    except Exception as e:
+        logger.warning(
+            "⚠️  Could not resolve RESULTS_CHANNEL %s: %s — "
+            "set RESULTS_CHANNEL to the channel @username or ensure bot is admin.",
+            RESULTS_CHANNEL, e,
+        )
 
 
 async def _start_user_session():
