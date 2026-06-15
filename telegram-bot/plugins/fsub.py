@@ -22,7 +22,7 @@ async def f_sub_cmd(bot, message):
         return await m.edit("ᴛʜɪꜱ ᴄʜᴀᴛ ɪꜱ ɴᴏᴛ ᴠᴇʀɪꜰɪᴇᴅ 🚫\nᴜꜱᴇ /verify")
 
     try:
-        f_sub = int(message.command[-1])
+        f_sub = int(message.command[1])
     except Exception:
         return await m.edit("ɪɴᴄᴏʀʀᴇᴄᴛ ꜰᴏʀᴍᴀᴛ 🚫\nᴜꜱᴇ `/fsub` ᴄʜᴀɴɴᴇʟ ɪᴅ")
 
