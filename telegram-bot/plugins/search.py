@@ -351,7 +351,7 @@ async def search(bot, message):
         f"<i>(Results auto-delete in {mins_label} min{'s' if mins_label != 1 else ''})</i>"
     )
     kb = _page_keyboard(session_id, 1, actual_pages, page_urls[0])
-    await wait_msg.edit(group_text, reply_markup=kb)
+    await wait_msg.edit(group_text, reply_markup=kb, disable_web_page_preview=True)
     await _schedule_delete(bot, wait_msg, ttl)
 
 
