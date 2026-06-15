@@ -13,4 +13,6 @@ from .db import (
     create_indexes,
     get_connected_channels_count,
     force_sub,
+    get_setting,
+    set_setting,
 )
