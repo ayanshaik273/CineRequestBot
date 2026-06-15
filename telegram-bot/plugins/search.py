@@ -44,14 +44,17 @@ async def _schedule_delete(bot, message, ttl: int):
 
 
 async def _search_channels(user_client, channels: list, query: str) -> list:
-    """Search connected channels via user session. Returns list of message texts."""
+    """Search connected channels via user session. Returns list of message texts.
+
+    We trust Telegram's search_messages() to filter by relevance — adding a
+    secondary substring check was discarding valid fuzzy/partial matches.
+    """
     results = []
-    q = query.lower()
     for ch_id in channels:
         try:
             async for msg in user_client.search_messages(ch_id, query=query, limit=50):
                 text = (msg.text or msg.caption or "").strip()
-                if text and q in text.lower():
+                if text:
                     results.append(text)
                     if len(results) >= 30:
                         return results
