@@ -8,7 +8,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @Client.on_message(filters.group & filters.new_chat_members)
 async def new_group(bot, message):
-    bot_id = (await bot.get_me()).id
+    bot_id = bot.me.id if bot.me else (await bot.get_me()).id
     member = [u.id for u in (message.new_chat_members or [])]
     if bot_id not in member:
         return
