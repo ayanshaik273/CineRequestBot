@@ -214,3 +214,52 @@ async def set_setting(key: str, value) -> None:
         raise RuntimeError("Database not connected")
     db = _dbclient["Channel-Filter"]
     await db["Settings"].update_one({"_id": key}, {"$set": {"value": value}}, upsert=True)
+
+
+async def record_failed_search(query: str, chat_id: int, chat_title: str) -> None:
+    """Record a failed search query for daily summary reporting."""
+    global _dbclient
+    if _dbclient is None:
+        return
+    try:
+        import datetime
+        db = _dbclient["Channel-Filter"]
+        col = db["FailedSearches"]
+        await col.update_one(
+            {"query_lower": query.strip().lower()},
+            {
+                "$inc": {"count": 1},
+                "$set": {"query": query.strip(), "last_chat_id": chat_id, "last_chat_title": chat_title},
+                "$setOnInsert": {"first_seen": datetime.datetime.utcnow()},
+                "$push": {"chats": {"$each": [{"chat_id": chat_id, "title": chat_title}], "$slice": -10}},
+            },
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+async def get_daily_summary(top_n: int = 10) -> list:
+    """Return top N failed search queries sorted by count descending."""
+    global _dbclient
+    if _dbclient is None:
+        return []
+    try:
+        db = _dbclient["Channel-Filter"]
+        col = db["FailedSearches"]
+        cursor = col.find({}, {"query": 1, "count": 1, "last_chat_title": 1}).sort("count", -1).limit(top_n)
+        return await cursor.to_list(length=top_n)
+    except Exception:
+        return []
+
+
+async def reset_failed_searches() -> None:
+    """Clear all failed search records after daily summary is sent."""
+    global _dbclient
+    if _dbclient is None:
+        return
+    try:
+        db = _dbclient["Channel-Filter"]
+        await db["FailedSearches"].delete_many({})
+    except Exception:
+        pass
