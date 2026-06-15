@@ -41,7 +41,7 @@ async def run_check_up():
                         except FloodWait as e:
                             await asyncio.sleep(e.value)
                         except Exception as e:
-                            logger.debug(f"Delete error: {data} ��� {e}")
+                            logger.debug(f"Delete error: {data} - {e}")
                     await delete_all_dlt_data(_time)
                 except Exception as e:
                     logger.warning(f"Auto-delete loop error: {e}")
