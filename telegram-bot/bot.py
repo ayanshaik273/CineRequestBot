@@ -56,6 +56,8 @@ class Bot(Client):
 
         if not RESULTS_CHANNEL:
             logger.warning("⚠️  RESULTS_CHANNEL not set — add it to env vars.")
+        else:
+            await _warmup_results_channel(self)
 
         _start_autodelete_worker()
 
@@ -98,6 +100,23 @@ class Bot(Client):
             pass
         await super().stop()
         logger.info("Bot stopped")
+
+
+async def _warmup_results_channel(bot):
+    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send."""
+    try:
+        chat = await bot.get_chat(RESULTS_CHANNEL)
+        logger.info(
+            "✅ Results channel resolved: %s (@%s)",
+            chat.title,
+            getattr(chat, "username", "private"),
+        )
+    except Exception as e:
+        logger.warning(
+            "⚠️  Could not resolve RESULTS_CHANNEL %s: %s — "
+            "make sure the bot is admin in that channel before starting.",
+            RESULTS_CHANNEL, e,
+        )
 
 
 async def _start_user_session():
