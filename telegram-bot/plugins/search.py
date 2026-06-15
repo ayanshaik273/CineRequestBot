@@ -5,7 +5,8 @@ import uuid
 from time import time
 
 from pyrogram import Client, filters
-from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate
+from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, PeerIdInvalid
+
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION
@@ -21,6 +22,9 @@ _SESSION_TTL = 3600     # page sessions expire after 1 hour
 
 # In-memory page sessions: session_id → session dict
 _page_sessions: dict = {}
+
+# Lock: prevents concurrent User.start() calls that cause AUTH_KEY_DUPLICATED
+_user_start_lock = asyncio.Lock()
 
 
 def _prune_sessions():
@@ -147,6 +151,37 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
     return InlineKeyboardMarkup(rows)
 
 
+async def _send_to_results_channel(bot, text: str):
+    """Send a message to RESULTS_CHANNEL.
+
+    On PeerIdInvalid (in-memory session lost access_hash after restart/reconnect),
+    force-resolve the peer by scanning all dialogs, then retry once.
+    This is more reliable than a pre-resolve warmup that may not survive reconnections.
+    """
+    try:
+        return await bot.send_message(
+            chat_id=RESULTS_CHANNEL,
+            text=text,
+            disable_web_page_preview=True,
+        )
+    except PeerIdInvalid:
+        logger.warning("PeerIdInvalid for RESULTS_CHANNEL — rescanning dialogs to re-resolve peer")
+        try:
+            async for dialog in bot.get_dialogs():
+                if dialog.chat.id == RESULTS_CHANNEL:
+                    logger.info("RESULTS_CHANNEL peer re-resolved via dialogs scan")
+                    break
+        except Exception as scan_err:
+            logger.warning("Dialog scan failed during peer re-resolution: %s", scan_err)
+        # Retry — if the scan found the peer it's now cached; otherwise this will
+        # raise a descriptive exception that the caller can surface to the user.
+        return await bot.send_message(
+            chat_id=RESULTS_CHANNEL,
+            text=text,
+            disable_web_page_preview=True,
+        )
+
+
 # ── main search handler ────────────────────────────────────────────────────────
 
 @Client.on_message(
@@ -202,12 +237,18 @@ async def search(bot, message):
         return
 
     # ── Connect user session ───────────────────────────────────────────────
+    # Use a lock so concurrent searches don't all call User.start() at the
+    # same time — that causes [406 AUTH_KEY_DUPLICATED] from Telegram.
     try:
         from client import User
         if User is None:
             raise RuntimeError("User session is not configured (SESSION env var missing)")
         if not User.is_connected:
-            await User.start()
+            async with _user_start_lock:
+                # Double-check inside the lock — another coroutine may have
+                # already started the session while we were waiting.
+                if not User.is_connected:
+                    await User.start()
     except Exception as e:
         logger.warning("User session unavailable: %s", e)
         m = await message.reply(
@@ -248,28 +289,15 @@ async def search(bot, message):
     pages_data = [results[i:i + _RESULTS_PER_PAGE] for i in range(0, total, _RESULTS_PER_PAGE)]
     total_pages = len(pages_data)
 
-    # ── Pre-resolve RESULTS_CHANNEL peer ──────────────────────────────────
-    try:
-        await bot.get_chat(RESULTS_CHANNEL)
-    except Exception:
-        try:
-            async for dialog in bot.get_dialogs():
-                if dialog.chat.id == RESULTS_CHANNEL:
-                    break
-        except Exception as e:
-            logger.warning("Could not pre-resolve RESULTS_CHANNEL peer: %s", e)
-
     # ── Post each page to RESULTS_CHANNEL ─────────────────────────────────
+    # _send_to_results_channel handles PeerIdInvalid by re-resolving the peer
+    # via a full dialog scan and retrying — no separate pre-resolve step needed.
     page_urls: list[str] = []
     for pg_num, pg_results in enumerate(pages_data, 1):
         offset = (pg_num - 1) * _RESULTS_PER_PAGE
         text = _build_page_message(query, pg_results, total, pg_num, total_pages, offset, ttl)
         try:
-            sent = await bot.send_message(
-                chat_id=RESULTS_CHANNEL,
-                text=text,
-                disable_web_page_preview=True,
-            )
+            sent = await _send_to_results_channel(bot, text)
             url = await _results_link(bot, RESULTS_CHANNEL, sent.id)
             page_urls.append(url)
             await _schedule_delete(bot, sent, ttl)
