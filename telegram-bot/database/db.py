@@ -192,3 +192,25 @@ async def create_indexes():
         logger.info("Database indexes OK")
     except Exception as e:
         logger.warning(f"Index warning: {e}")
+
+
+async def get_setting(key: str, default=None):
+    """Get a bot setting from the Settings collection."""
+    global _dbclient
+    if _dbclient is None:
+        return default
+    try:
+        db = _dbclient["Channel-Filter"]
+        doc = await db["Settings"].find_one({"_id": key})
+        return doc["value"] if doc else default
+    except Exception:
+        return default
+
+
+async def set_setting(key: str, value) -> None:
+    """Upsert a bot setting into the Settings collection."""
+    global _dbclient
+    if _dbclient is None:
+        raise RuntimeError("Database not connected")
+    db = _dbclient["Channel-Filter"]
+    await db["Settings"].update_one({"_id": key}, {"$set": {"value": value}}, upsert=True)
