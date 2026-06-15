@@ -26,27 +26,29 @@ async def get_chat_safe(client, chat_id):
     return None
 
 
-async def copy_msgs(br_msg, chat_id):
-    try:
-        await br_msg.copy(chat_id)
-        return True
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        return await copy_msgs(br_msg, chat_id)
-    except Exception:
-        return False
-
-
-async def grp_copy_msgs(br_msg, chat_id):
-    try:
-        h = await br_msg.copy(chat_id)
+async def copy_msgs(br_msg, chat_id: int) -> bool:
+    """Copy a message to chat_id — loop on FloodWait instead of recursing."""
+    while True:
         try:
-            await h.pin()
+            await br_msg.copy(chat_id)
+            return True
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 1)
         except Exception:
-            pass
-        return True
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        return await grp_copy_msgs(br_msg, chat_id)
-    except Exception:
-        return False
+            return False
+
+
+async def grp_copy_msgs(br_msg, chat_id: int) -> bool:
+    """Copy a message to a group and try to pin it — loop on FloodWait."""
+    while True:
+        try:
+            h = await br_msg.copy(chat_id)
+            try:
+                await h.pin()
+            except Exception:
+                pass
+            return True
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 1)
+        except Exception:
+            return False
