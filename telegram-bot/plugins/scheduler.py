@@ -61,7 +61,7 @@ async def _daily_summary_loop(bot: Client) -> None:
 
 async def start_daily_summary_scheduler(bot: Client) -> None:
     """Start the background scheduler task (call once on bot startup)."""
-    asyncio.get_event_loop().create_task(_daily_summary_loop(bot))
+    asyncio.create_task(_daily_summary_loop(bot))
     logger.info("Daily summary scheduler started")
 
 
