@@ -351,11 +351,9 @@ async def page_cb(bot, cb):
     url = urls[page - 1]
     mins_label = max(1, ttl // 60)
     text = (
-        f"✅ <b>Found {total} result{'s' if total != 1 else ''} in "
-        f"<a href="{url}">Channel</a>.</b>
-"
-        f"Page {page}/{total_pages}
-"
+        f"\u2705 <b>Found {total} result{'s' if total != 1 else ''} in "
+        f'<a href="{url}">Channel</a>.</b>\n'
+        f"Page {page}/{total_pages}\n"
         f"<i>(Results auto-delete in {mins_label} min{'s' if mins_label != 1 else ''})</i>"
     )
     kb = _page_keyboard(session_id, page, total_pages, url)
