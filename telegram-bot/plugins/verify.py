@@ -65,8 +65,11 @@ async def verify_(bot, update):
     if not group:
         await update.answer("Group not found", show_alert=True)
         return
-    name   = group["name"]
-    user   = group["user_id"]
+    name   = group.get("name", str(group_id))
+    user   = group.get("user_id")
+    if not user:
+        await update.answer("Group data missing.", show_alert=True)
+        return
     action = update.data.split("_")[1]
 
     if action == "approve":
