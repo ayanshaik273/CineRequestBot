@@ -154,13 +154,12 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
 async def _send_to_results_channel(bot, text: str):
     """Send a message to RESULTS_CHANNEL.
 
-    On PeerIdInvalid or ValueError (peer not cached after restart), re-resolve
-    using raw MTProto GetFullChannel with access_hash=0 — works for private channels
-    where the bot is admin. Bots cannot use get_dialogs().
+    On PeerIdInvalid or ValueError (peer not cached after restart), re-resolve:
+    - If RESULTS_CHANNEL is a @username, get_chat() resolves it instantly.
+    - If it is a numeric ID, try raw MTProto GetFullChannel(access_hash=0),
+      which Telegram accepts when the bot is admin, then fall back to get_chat().
+    Bots cannot use get_dialogs().
     """
-    from pyrogram.raw.functions.channels import GetFullChannel
-    from pyrogram.raw.types import InputChannel
-
     try:
         return await bot.send_message(
             chat_id=RESULTS_CHANNEL,
@@ -168,19 +167,25 @@ async def _send_to_results_channel(bot, text: str):
             disable_web_page_preview=True,
         )
     except (PeerIdInvalid, ValueError):
-        logger.warning("Peer id invalid for RESULTS_CHANNEL — re-resolving via raw MTProto")
-        bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
+        logger.warning("Peer id invalid for RESULTS_CHANNEL — re-resolving")
         try:
-            await bot.invoke(
-                GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
-            )
-            logger.info("RESULTS_CHANNEL peer re-resolved via raw API")
-        except Exception as resolve_err:
-            try:
+            if isinstance(RESULTS_CHANNEL, str):
                 await bot.get_chat(RESULTS_CHANNEL)
-            except Exception:
-                pass
-            logger.warning("Raw API re-resolution failed: %s", resolve_err)
+                logger.info("RESULTS_CHANNEL peer re-resolved via get_chat (username)")
+            else:
+                from pyrogram.raw.functions.channels import GetFullChannel
+                from pyrogram.raw.types import InputChannel
+                bare_id = abs(RESULTS_CHANNEL) - 1_000_000_000_000
+                try:
+                    await bot.invoke(
+                        GetFullChannel(channel=InputChannel(channel_id=bare_id, access_hash=0))
+                    )
+                    logger.info("RESULTS_CHANNEL peer re-resolved via raw API")
+                except Exception:
+                    await bot.get_chat(RESULTS_CHANNEL)
+                    logger.info("RESULTS_CHANNEL peer re-resolved via get_chat (fallback)")
+        except Exception as resolve_err:
+            logger.warning("Peer re-resolution failed: %s", resolve_err)
         return await bot.send_message(
             chat_id=RESULTS_CHANNEL,
             text=text,
