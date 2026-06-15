@@ -97,21 +97,15 @@ def _build_page_message(query: str, page_results: list, total: int,
     """Build the RESULTS_CHANNEL message for one page of results."""
     mins = max(1, ttl_secs // 60)
     header = (
-        f"U0001f50d <b>Search:</b> {html.escape(query)}
-"
-        f"U0001f4c4 <b>Page {page}/{total_pages}</b>  ·  "
-        f"<b>{total} result{'s' if total != 1 else ''} total</b>
-
-"
+        "\U0001f50d <b>Search:</b> " + html.escape(query) + "\n"
+        + "\U0001f4c4 <b>Page " + str(page) + "/" + str(total_pages) + "</b>  \u00b7  "
+        + "<b>" + str(total) + " result" + ("s" if total != 1 else "") + " total</b>\n\n"
     )
-    join_line = f"U0001f4e2 Join: {backup_link}
-" if backup_link else ""
+    join_line = "\U0001f4e2 Join: " + backup_link + "\n" if backup_link else ""
     footer = (
-        "
-" + "─" * 32 + "
-"
+        "\n" + "\u2500" * 32 + "\n"
         + join_line
-        + f"⏳ <i>Auto-deletes in {mins} min{'s' if mins != 1 else ''}</i>"
+        + "\u23f3 <i>Auto-deletes in " + str(mins) + " min" + ("s" if mins != 1 else "") + "</i>"
     )
     budget = _TG_LIMIT - len(header) - len(footer) - 20
     body_lines = []
@@ -124,10 +118,8 @@ def _build_page_message(query: str, page_results: list, total: int,
         if len(full) <= remaining - 10:
             snippet = full
         else:
-            snippet = full[:max(remaining - 1, 50)] + "…"
-        entry = f"<b>{i}.</b> {snippet}
-
-"
+            snippet = full[:max(remaining - 1, 50)] + "\u2026"
+        entry = "<b>" + str(i) + ".</b> " + snippet + "\n\n"
         body_lines.append(entry)
         used += len(entry)
         if used >= budget:
@@ -145,17 +137,17 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
         start = max(1, end - 3)
         pg_row = []
         for p in range(start, end + 1):
-            label = f"• Pg {p} •" if p == page else f"Pg {p}"
-            pg_row.append(InlineKeyboardButton(label, callback_data=f"pg_{session_id}_{p}"))
+            label = "\u2022 Pg " + str(p) + " \u2022" if p == page else "Pg " + str(p)
+            pg_row.append(InlineKeyboardButton(label, callback_data="pg_" + session_id + "_" + str(p)))
         rows.append(pg_row)
         nav = []
         if page > 1:
-            nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"pg_{session_id}_{page - 1}"))
+            nav.append(InlineKeyboardButton("\u2b05\ufe0f Prev", callback_data="pg_" + session_id + "_" + str(page - 1)))
         if page < total_pages:
-            nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"pg_{session_id}_{page + 1}"))
+            nav.append(InlineKeyboardButton("Next \u27a1\ufe0f", callback_data="pg_" + session_id + "_" + str(page + 1)))
         if nav:
             rows.append(nav)
-    rows.append([InlineKeyboardButton("U0001f3ac Click here to Get movie/Series", url=current_url)])
+    rows.append([InlineKeyboardButton("\U0001f3ac Click here to Get movie/Series", url=current_url)])
     return InlineKeyboardMarkup(rows)
 
 
@@ -206,20 +198,19 @@ async def search(bot, message):
     channels = group.get("channels", [])
     if not channels:
         m = await message.reply(
-            "⚠️ <b>No channels connected yet.</b>
-"
+            "\u26a0\ufe0f <b>No channels connected yet.</b>\n"
             "Ask the group admin to use /connect to link channels first."
         )
         await _schedule_delete(bot, m, 60)
         return
 
     if not RESULTS_CHANNEL:
-        m = await message.reply("⚠️ <b>Results channel not configured.</b> Contact the bot owner.")
+        m = await message.reply("\u26a0\ufe0f <b>Results channel not configured.</b> Contact the bot owner.")
         await _schedule_delete(bot, m, 60)
         return
 
     if not SESSION:
-        m = await message.reply("⚠️ <b>Search session not configured.</b> Contact the bot owner.")
+        m = await message.reply("\u26a0\ufe0f <b>Search session not configured.</b> Contact the bot owner.")
         await _schedule_delete(bot, m, 60)
         return
 
@@ -233,12 +224,12 @@ async def search(bot, message):
                     await User.start()
     except Exception as e:
         logger.warning("User session unavailable: %s", e)
-        m = await message.reply("⚠️ <b>Search is temporarily unavailable.</b> Try again in a moment.")
+        m = await message.reply("\u26a0\ufe0f <b>Search is temporarily unavailable.</b> Try again in a moment.")
         await _schedule_delete(bot, m, 30)
         return
 
     backup_link = await _get_backup_link()
-    wait_msg = await message.reply("U0001f50d <i>Searching...</i>")
+    wait_msg = await message.reply("\U0001f50d <i>Searching...</i>")
 
     results = await _search_channels(User, channels, query, backup_link)
     ttl = group.get("auto_delete", SEARCH_REPLY_TTL)
@@ -254,22 +245,16 @@ async def search(bot, message):
         imdb_hits = await search_imdb(query)
         imdb_text = ""
         if imdb_hits:
-            imdb_text = "
-
-<b>Did you mean:</b>
-"
-            imdb_text += "
-".join(f"• {html.escape(h['title'])}" for h in imdb_hits[:5])
+            imdb_text = "\n\n<b>Did you mean:</b>\n"
+            imdb_text += "\n".join("\u2022 " + html.escape(h["title"]) for h in imdb_hits[:5])
         _no_res_kb = None
         if backup_link:
             _no_res_kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("U0001f4e9 Request Here", url=backup_link)
+                InlineKeyboardButton("\U0001f4e9 Request Here", url=backup_link)
             ]])
         await wait_msg.edit(
-            f"❌ <b>No results found for:</b> <i>{html.escape(query)}</i>"
-            f"{imdb_text}
-
-<b>Please request the group admin U0001f447</b>",
+            "\u274c <b>No results found for:</b> <i>" + html.escape(query) + "</i>"
+            + imdb_text + "\n\n<b>Please request the group admin \U0001f447</b>",
             reply_markup=_no_res_kb,
         )
         await _schedule_delete(bot, wait_msg, ttl)
@@ -279,7 +264,7 @@ async def search(bot, message):
     pages_data = [results[i:i + _RESULTS_PER_PAGE] for i in range(0, total, _RESULTS_PER_PAGE)]
     total_pages = len(pages_data)
 
-    page_urls: list[str] = []
+    page_urls: list = []
     for pg_num, pg_results in enumerate(pages_data, 1):
         offset = (pg_num - 1) * _RESULTS_PER_PAGE
         text = _build_page_message(query, pg_results, total, pg_num, total_pages, offset, ttl, backup_link)
@@ -292,19 +277,16 @@ async def search(bot, message):
             logger.error("Failed to send page %d to RESULTS_CHANNEL: %s", pg_num, e)
             if pg_num == 1:
                 await wait_msg.edit(
-                    f"❌ <b>Failed to post results.</b>
-"
-                    f"<code>{type(e).__name__}: {html.escape(str(e))}</code>
-
-"
-                    f"ℹ️ Make sure the bot is admin in the results channel with "
-                    f"<b>Post Messages</b> permission."
+                    "\u274c <b>Failed to post results.</b>\n"
+                    "<code>" + type(e).__name__ + ": " + html.escape(str(e)) + "</code>\n\n"
+                    "\u2139\ufe0f Make sure the bot is admin in the results channel with "
+                    "<b>Post Messages</b> permission."
                 )
                 return
             break
 
     if not page_urls:
-        await wait_msg.edit("❌ <b>Failed to post results.</b> Please try again.")
+        await wait_msg.edit("\u274c <b>Failed to post results.</b> Please try again.")
         return
 
     actual_pages = len(page_urls)
@@ -317,10 +299,10 @@ async def search(bot, message):
 
     mins_label = max(1, ttl // 60)
     group_text = (
-        f"\u2705 <b>Found {total} result{'s' if total != 1 else ''} in "
-        f'<a href="{page_urls[0]}">Channel</a>.</b>\n'
-        f"Page 1/{actual_pages}\n"
-        f"<i>(Results auto-delete in {mins_label} min{'s' if mins_label != 1 else ''})</i>"
+        "\u2705 <b>Found " + str(total) + " result" + ("s" if total != 1 else "") + " in "
+        + '<a href="' + page_urls[0] + '">Channel</a>.</b>\n'
+        + "Page 1/" + str(actual_pages) + "\n"
+        + "<i>(Results auto-delete in " + str(mins_label) + " min" + ("s" if mins_label != 1 else "") + ")</i>"
     )
     kb = _page_keyboard(session_id, 1, actual_pages, page_urls[0])
     await wait_msg.edit(group_text, reply_markup=kb, disable_web_page_preview=True)
@@ -335,7 +317,7 @@ async def page_cb(bot, cb):
 
     session = _page_sessions.get(session_id)
     if not session:
-        return await cb.answer("⏰ Session expired -- please search again.", show_alert=True)
+        return await cb.answer("\u23f0 Session expired -- please search again.", show_alert=True)
 
     urls = session["urls"]
     total = session["total"]
@@ -349,10 +331,10 @@ async def page_cb(bot, cb):
     url = urls[page - 1]
     mins_label = max(1, ttl // 60)
     text = (
-        f"\u2705 <b>Found {total} result{'s' if total != 1 else ''} in "
-        f'<a href="{url}">Channel</a>.</b>\n'
-        f"Page {page}/{total_pages}\n"
-        f"<i>(Results auto-delete in {mins_label} min{'s' if mins_label != 1 else ''})</i>"
+        "\u2705 <b>Found " + str(total) + " result" + ("s" if total != 1 else "") + " in "
+        + '<a href="' + url + '">Channel</a>.</b>\n'
+        + "Page " + str(page) + "/" + str(total_pages) + "\n"
+        + "<i>(Results auto-delete in " + str(mins_label) + " min" + ("s" if mins_label != 1 else "") + ")</i>"
     )
     kb = _page_keyboard(session_id, page, total_pages, url)
     try:
