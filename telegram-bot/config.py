@@ -25,7 +25,7 @@ else:
 
 CHANNEL        = os.environ.get("UPDATES_CHANNEL", "")
 BACKUP_CHANNEL = os.environ.get("BACKUP_CHANNEL", "")
-_rc = os.environ.get(RESULTS_CHANNEL, 0)
+_rc = os.environ.get("RESULTS_CHANNEL", "0")
 try:
     RESULTS_CHANNEL = int(_rc)          # numeric ID e.g. -1004413455841
 except ValueError:
