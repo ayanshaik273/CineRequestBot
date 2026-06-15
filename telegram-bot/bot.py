@@ -8,6 +8,7 @@ from pyrogram import Client
 from pyrogram.errors import FloodWait
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION, LOG_CHANNEL, RESULTS_CHANNEL
 from database import create_indexes
+from plugins.scheduler import start_daily_summary_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +67,7 @@ class Bot(Client):
             await _warmup_results_channel(self)
 
         _start_autodelete_worker(self)
+        await start_daily_summary_scheduler(self)
 
         from pyrogram.types import BotCommand
         await self.set_bot_commands([
