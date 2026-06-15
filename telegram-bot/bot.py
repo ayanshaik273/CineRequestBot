@@ -109,7 +109,11 @@ class Bot(Client):
 
 
 async def _warmup_results_channel(bot):
-    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it — prevents PeerIdInvalid on first send."""
+    """Resolve RESULTS_CHANNEL peer so Pyrogram caches it.
+
+    Bots cannot use get_dialogs() — only user accounts can.
+    get_chat() works for any channel the bot is admin in.
+    """
     try:
         chat = await bot.get_chat(RESULTS_CHANNEL)
         logger.info(
@@ -117,23 +121,12 @@ async def _warmup_results_channel(bot):
             chat.title,
             getattr(chat, "username", "private"),
         )
-        return
-    except Exception:
-        pass
-
-    logger.info("⏳ Warming up RESULTS_CHANNEL peer via dialogs scan...")
-    try:
-        async for dialog in bot.get_dialogs():
-            if dialog.chat.id == RESULTS_CHANNEL:
-                logger.info("✅ Results channel found via dialogs: %s", dialog.chat.title)
-                return
-        logger.warning(
-            "⚠️  RESULTS_CHANNEL %s not found in bot dialogs — "
-            "make sure the bot is admin in that channel.",
-            RESULTS_CHANNEL,
-        )
     except Exception as e:
-        logger.warning("⚠️  Dialog scan failed: %s", e)
+        logger.warning(
+            "⚠️  Could not resolve RESULTS_CHANNEL %s: %s — "
+            "make sure the bot is admin with Post Messages permission.",
+            RESULTS_CHANNEL, e,
+        )
 
 
 async def _start_user_session():
