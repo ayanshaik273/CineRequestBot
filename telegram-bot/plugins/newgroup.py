@@ -1,9 +1,18 @@
+import asyncio
+
 from config import LOG_CHANNEL
 from utils import script, add_user
 from database.db import add_group
-from asyncio import sleep
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
+async def _delayed_delete(msg, delay: int) -> None:
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
 
 @Client.on_message(filters.group & filters.new_chat_members)
@@ -42,5 +51,4 @@ async def new_group(bot, message):
             await bot.send_message(chat_id=LOG_CHANNEL, text=text)
         except Exception:
             pass
-    await sleep(120)
-    await m.delete()
+    asyncio.create_task(_delayed_delete(m, 120))
