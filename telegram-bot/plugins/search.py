@@ -26,6 +26,7 @@ _OLD_LINKS = [
     "https://t.me/BackupchannelJoinn",
     "https://t.me/%2BiGDgei3ADkZiMjNl",
     "https://t.me/+iGDgei3ADkZiMjNl",
+    "https://t.me/backupchannek",
 ]
 
 
