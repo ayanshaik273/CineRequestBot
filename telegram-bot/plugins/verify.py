@@ -60,6 +60,8 @@ async def _verify(bot, message):
 
 @Client.on_callback_query(filters.regex(r"^verify"))
 async def verify_(bot, update):
+    if update.from_user.id != OWNER_ID:
+        return await update.answer("Not authorised.", show_alert=True)
     group_id = int(update.data.split("_")[-1])
     group    = await get_group(group_id)
     if not group:
