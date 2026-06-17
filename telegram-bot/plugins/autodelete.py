@@ -18,7 +18,9 @@ def _timer_keyboard(current_secs: int) -> InlineKeyboardMarkup:
 async def autodelete_cmd(bot, message):
     group = await get_group(message.chat.id)
     if not group:
-        return await message.reply("❌ This group is not verified. Use /verify first.")
+        return await message.reply("❌ This group is not registered. Use /verify first.")
+    if not group.get("verified"):
+        return await message.reply("❌ This group is not verified yet. Use /verify first.")
 
     if message.from_user.id != group.get("user_id"):
         return await message.reply(f"Only {group.get('user_name')} can use this command.")
