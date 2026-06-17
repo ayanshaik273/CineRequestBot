@@ -22,6 +22,10 @@ _SESSION_TTL = 3600
 _page_sessions: dict = {}
 _user_start_lock = asyncio.Lock()
 
+_rate_limit: dict = {}
+_RATE_LIMIT_COUNT = 3
+_RATE_LIMIT_WINDOW = 30
+
 _OLD_LINKS = [
     "https://t.me/BackupchannelJoinn",
     "https://t.me/%2BiGDgei3ADkZiMjNl",
@@ -30,11 +34,25 @@ _OLD_LINKS = [
 ]
 
 
+def _is_rate_limited(user_id: int) -> bool:
+    now = time()
+    hits = [t for t in _rate_limit.get(user_id, []) if now - t < _RATE_LIMIT_WINDOW]
+    if len(hits) >= _RATE_LIMIT_COUNT:
+        _rate_limit[user_id] = hits
+        return True
+    hits.append(now)
+    _rate_limit[user_id] = hits
+    return False
+
+
 def _prune_sessions():
     now = time()
     expired = [k for k, v in _page_sessions.items() if now > v.get("ttl", 0)]
     for k in expired:
         _page_sessions.pop(k, None)
+    expired_rl = [k for k, v in _rate_limit.items() if not any(now - t < _RATE_LIMIT_WINDOW for t in v)]
+    for k in expired_rl:
+        _rate_limit.pop(k, None)
 
 
 async def _get_backup_link() -> str:
@@ -180,6 +198,7 @@ async def _send_to_results_channel(bot, text: str):
         "start", "help", "about", "id", "verify", "connect", "disconnect",
         "connections", "fsub", "nofsub", "autodelete", "broadcast",
         "broadcast_groups", "ping", "stats", "setbackup",
+        "addsource", "summary", "clearfailed",
     ])
 )
 async def search(bot, message):
@@ -194,6 +213,13 @@ async def search(bot, message):
         return
 
     if not await force_sub(bot, message):
+        return
+
+    if message.from_user and _is_rate_limited(message.from_user.id):
+        m = await message.reply(
+            "⚠️ <b>Too many searches.</b> Please wait 30 seconds and try again."
+        )
+        await _schedule_delete(bot, m, 30)
         return
 
     channels = group.get("channels", [])
