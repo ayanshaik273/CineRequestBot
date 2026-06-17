@@ -80,7 +80,9 @@ class Bot(Client):
             BotCommand("fsub",        "Set force-subscribe channel"),
             BotCommand("nofsub",      "Remove force-subscribe"),
             BotCommand("autodelete",  "Set result auto-delete timer"),
+            BotCommand("addsource",   "Add/remove/list source channels"),
             BotCommand("ping",        "Check bot speed"),
+            BotCommand("stats",       "Bot statistics (owner only)"),
             BotCommand("setbackup",   "Update backup channel link (owner only)"),
             BotCommand("help",        "Show all commands"),
         ])
