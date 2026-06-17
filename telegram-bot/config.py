@@ -11,17 +11,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 OWNER_ID  = int(os.environ.get("OWNER_ID", 0))
 LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", 0))
 
-MONGODB_PASSWORD = os.environ.get("MONGODB_PASSWORD", "")
-_raw_uri = os.environ.get("MONGO_URI", "")
-if MONGODB_PASSWORD:
-    MONGO_URI = (
-        f"mongodb+srv://abdulazizshaik521:{MONGODB_PASSWORD}"
-        f"@azizthekiller.h74ev.mongodb.net/?appName=Azizthekiller"
-    )
-elif _raw_uri:
-    MONGO_URI = _raw_uri
-else:
-    MONGO_URI = ""
+MONGO_URI = os.environ.get("MONGO_URI", "")
 
 CHANNEL        = os.environ.get("UPDATES_CHANNEL", "")
 BACKUP_CHANNEL = os.environ.get("BACKUP_CHANNEL", "")
