@@ -2,7 +2,18 @@ from flask import Flask, request, jsonify, render_template_string
 import threading
 import asyncio
 import logging
+import os
 from config import HEALTH_PORT as PORT, API_ID, API_HASH
+
+_GEN_SECRET = os.environ.get("GEN_SECRET", "")
+
+
+def _check_gen_auth():
+    """Return True if the request carries the correct GEN_SECRET key."""
+    if not _GEN_SECRET:
+        return False
+    key = request.args.get("key") or (request.json or {}).get("key", "")
+    return key == _GEN_SECRET
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
@@ -161,11 +172,15 @@ _pyro_client = None
 
 @app.route("/gen")
 def gen_index():
+    if not _check_gen_auth():
+        return "Forbidden — add ?key=<GEN_SECRET> to the URL", 403
     return render_template_string(_GEN_HTML)
 
 
 @app.route("/gen/send", methods=["POST"])
 def gen_send():
+    if not _check_gen_auth():
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
     global _pyro_client, _state
     phone = (request.json or {}).get("phone", "").strip()
     if not phone:
@@ -198,6 +213,8 @@ def gen_send():
 
 @app.route("/gen/signin", methods=["POST"])
 def gen_signin():
+    if not _check_gen_auth():
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
     code = (request.json or {}).get("code", "").strip()
     if not code:
         return jsonify({"ok": False, "error": "Code required"})
@@ -234,6 +251,8 @@ def gen_signin():
 
 @app.route("/gen/2fa", methods=["POST"])
 def gen_2fa():
+    if not _check_gen_auth():
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
     pwd = (request.json or {}).get("pwd", "").strip()
     if not pwd:
         return jsonify({"ok": False, "error": "Password required"})
