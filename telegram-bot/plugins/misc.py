@@ -1,12 +1,60 @@
+import base64
+import html
+
 from config import LOG_CHANNEL, OWNER_ID
 from utils import script, get_groups, get_users, add_user, get_connected_channels_count
 from pyrogram import Client, filters, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+logger = __import__("logging").getLogger(__name__)
+
+
+def _decode_req_payload(payload: str) -> str:
+    """Decode a req- deep-link payload back to the original movie query."""
+    try:
+        encoded = payload[4:]  # strip "req-"
+        # Restore base64 padding
+        padded = encoded + "=" * (-len(encoded) % 4)
+        return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
 
 @Client.on_message(filters.command("start") & ~filters.channel)
 async def start(bot, message):
     await add_user(message.from_user.id, message.from_user.first_name)
+
+    # Handle "Request Here" deep link: /start req-<base64query>
+    args = message.command
+    if len(args) > 1 and args[1].startswith("req-"):
+        query = _decode_req_payload(args[1])
+        if query:
+            user = message.from_user
+            user_mention = user.mention if user else "Someone"
+            user_id = user.id if user else 0
+
+            await message.reply(
+                f"📩 <b>Request Received!</b>\n\n"
+                f"Your request for <b>{html.escape(query)}</b> has been noted.\n"
+                f"We'll try to add it as soon as possible. 🙏",
+                disable_web_page_preview=True,
+            )
+
+            if LOG_CHANNEL:
+                try:
+                    await bot.send_message(
+                        chat_id=LOG_CHANNEL,
+                        text=(
+                            "#NewRequest\n\n"
+                            f"🎬 <b>Movie/Series:</b> <code>{html.escape(query)}</code>\n"
+                            f"👤 <b>User:</b> {user_mention} (<code>{user_id}</code>)"
+                        ),
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to forward request to LOG_CHANNEL: %s", e)
+            return
+
     await message.reply(
         text=script.START.format(message.from_user.mention),
         disable_web_page_preview=True,
