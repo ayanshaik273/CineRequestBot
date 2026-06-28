@@ -73,8 +73,9 @@ async def add_user(id, name):
     data = {"_id": id, "name": name}
     try:
         await user_col.insert_one(data)
+        return True   # new user
     except DuplicateKeyError:
-        pass
+        return False  # already existed
 
 
 async def get_users():
