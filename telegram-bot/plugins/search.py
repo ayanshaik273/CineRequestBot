@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import html
 import logging
 import uuid
@@ -21,6 +20,7 @@ _RESULTS_PER_PAGE = 4
 _SESSION_TTL = 3600
 
 _page_sessions: dict = {}
+_req_sessions: dict = {}   # stores {key: {query, ttl}} for Request Here callbacks
 _user_start_lock = asyncio.Lock()
 
 _rate_limit: dict = {}
@@ -51,6 +51,9 @@ def _prune_sessions():
     expired = [k for k, v in _page_sessions.items() if now > v.get("ttl", 0)]
     for k in expired:
         _page_sessions.pop(k, None)
+    expired_req = [k for k, v in _req_sessions.items() if now > v.get("ttl", 0)]
+    for k in expired_req:
+        _req_sessions.pop(k, None)
     expired_rl = [k for k, v in _rate_limit.items() if not any(now - t < _RATE_LIMIT_WINDOW for t in v)]
     for k in expired_rl:
         _rate_limit.pop(k, None)
@@ -108,14 +111,6 @@ async def _search_channels(user_client, channels: list, query: str, backup_link:
         except Exception as e:
             logger.debug("Search error ch=%s: %s", ch_id, e)
     return results
-
-
-def _build_request_deep_link(bot_username: str, query: str) -> str:
-    """Build a t.me deep link that opens PM with the bot, pre-filled with the movie request."""
-    # Encode query as base64url (strip padding) so it survives Telegram's start param rules.
-    # Truncate to 45 chars so the full param stays within Telegram's 64-char limit.
-    encoded = base64.urlsafe_b64encode(query[:45].encode()).decode().rstrip("=")
-    return f"https://t.me/{bot_username}?start=req-{encoded}"
 
 
 def _build_page_message(query: str, page_results: list, total: int,
@@ -284,11 +279,17 @@ async def search(bot, message):
             imdb_text = "\n\n<b>Did you mean:</b>\n"
             imdb_text += "\n".join("\u2022 " + html.escape(h["title"]) for h in imdb_hits[:5])
 
-        # Build "Request Here" button — always links to bot PM with movie name pre-filled
-        me = await bot.get_me()
-        req_url = _build_request_deep_link(me.username, query)
+        # Store query in session so the callback can look it up
+        _prune_sessions()
+        req_key = uuid.uuid4().hex[:8]
+        _req_sessions[req_key] = {
+            "query": query,
+            "chat_title": message.chat.title or "",
+            "ttl": int(time()) + _SESSION_TTL,
+        }
+
         _no_res_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("\U0001f4e9 Request Here", url=req_url)
+            InlineKeyboardButton("\U0001f4e9 Request Here", callback_data=f"reqhere_{req_key}")
         ]])
 
         await wait_msg.edit(
@@ -405,3 +406,38 @@ async def page_cb(bot, cb):
     except Exception:
         pass
     await cb.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^reqhere_[0-9a-f]{8}$"))
+async def reqhere_cb(bot, cb):
+    """Handle 'Request Here' button tap — notify LOG_CHANNEL with request details."""
+    req_key = cb.data[8:]  # strip "reqhere_"
+    session = _req_sessions.get(req_key)
+
+    if not session:
+        return await cb.answer(
+            "⏰ This request button has expired. Please search again.",
+            show_alert=True,
+        )
+
+    query = session.get("query", "")
+    chat_title = session.get("chat_title", "")
+    user = cb.from_user
+    username = f"@{user.username}" if user.username else user.first_name
+
+    # Notify LOG_CHANNEL
+    if LOG_CHANNEL:
+        try:
+            await bot.send_message(
+                chat_id=LOG_CHANNEL,
+                text=(
+                    f"#RequestFromYourGroup\n"
+                    f"{html.escape(query)}\n"
+                    f"\U0001f464 {username}"
+                ),
+                disable_web_page_preview=True,
+            )
+        except Exception as e:
+            logger.warning("Failed to send request to LOG_CHANNEL: %s", e)
+
+    await cb.answer("✅ Your request has been sent to the admin!", show_alert=True)
