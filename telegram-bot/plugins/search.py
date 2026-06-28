@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, PeerIdInvalid
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL, LOG_CHANNEL
+from config import RESULTS_CHANNEL, SEARCH_REPLY_TTL, SESSION, BACKUP_CHANNEL, LOG_CHANNEL, OWNER_ID
 from database.db import get_group, force_sub, save_dlt_message, get_setting, record_failed_search
 from utils.spell import google_spell_check
 from utils.imdb import search_imdb
@@ -20,12 +20,14 @@ _RESULTS_PER_PAGE = 4
 _SESSION_TTL = 3600
 
 _page_sessions: dict = {}
-_req_sessions: dict = {}   # stores {key: {query, ttl}} for Request Here callbacks
 _user_start_lock = asyncio.Lock()
 
 _rate_limit: dict = {}
 _RATE_LIMIT_COUNT = 3
 _RATE_LIMIT_WINDOW = 30
+
+# Per-user cooldown for Request Here (60 s)
+_req_cooldown: dict = {}
 
 _OLD_LINKS = [
     "https://t.me/BackupchannelJoinn",
@@ -51,16 +53,12 @@ def _prune_sessions():
     expired = [k for k, v in _page_sessions.items() if now > v.get("ttl", 0)]
     for k in expired:
         _page_sessions.pop(k, None)
-    expired_req = [k for k, v in _req_sessions.items() if now > v.get("ttl", 0)]
-    for k in expired_req:
-        _req_sessions.pop(k, None)
     expired_rl = [k for k, v in _rate_limit.items() if not any(now - t < _RATE_LIMIT_WINDOW for t in v)]
     for k in expired_rl:
         _rate_limit.pop(k, None)
 
 
 async def _get_backup_link() -> str:
-    """Get backup channel link: DB value takes priority over BACKUP_CHANNEL env var."""
     try:
         link = await get_setting("backup_link")
         if link:
@@ -91,7 +89,6 @@ async def _schedule_delete(bot, message, ttl: int):
 
 
 async def _search_channels(user_client, channels: list, query: str, backup_link: str = "") -> list:
-    """Search connected channels via user session. Returns list of message texts."""
     results = []
     for ch_id in channels:
         try:
@@ -117,7 +114,6 @@ def _build_page_message(query: str, page_results: list, total: int,
                          page: int, total_pages: int,
                          offset: int, ttl_secs: int,
                          backup_link: str = "") -> str:
-    """Build the RESULTS_CHANNEL message for one page of results."""
     mins = max(1, ttl_secs // 60)
     header = (
         "\U0001f50d <b>Search:</b> " + html.escape(query) + "\n"
@@ -279,17 +275,10 @@ async def search(bot, message):
             imdb_text = "\n\n<b>Did you mean:</b>\n"
             imdb_text += "\n".join("\u2022 " + html.escape(h["title"]) for h in imdb_hits[:5])
 
-        # Store query in session so the callback can look it up
-        _prune_sessions()
-        req_key = uuid.uuid4().hex[:8]
-        _req_sessions[req_key] = {
-            "query": query,
-            "chat_title": message.chat.title or "",
-            "ttl": int(time()) + _SESSION_TTL,
-        }
-
+        # Embed query directly in callback_data (first 50 chars) — no session needed
+        safe_query = query[:50]
         _no_res_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("\U0001f4e9 Request Here", callback_data=f"reqhere_{req_key}")
+            InlineKeyboardButton("\U0001f4e9 Request Here", callback_data=f"req_admin#{safe_query}")
         ]])
 
         await wait_msg.edit(
@@ -408,36 +397,40 @@ async def page_cb(bot, cb):
     await cb.answer()
 
 
-@Client.on_callback_query(filters.regex(r"^reqhere_[0-9a-f]{8}$"))
-async def reqhere_cb(bot, cb):
-    """Handle 'Request Here' button tap — notify LOG_CHANNEL with request details."""
-    req_key = cb.data[8:]  # strip "reqhere_"
-    session = _req_sessions.get(req_key)
-
-    if not session:
+@Client.on_callback_query(filters.regex(r"^req_admin#"), group=-1)
+async def request_to_admin(bot, cb):
+    """Handle 'Request Here' tap — rate-limit, then send #RequestFromYourGroup to OWNER and LOG_CHANNEL."""
+    now = time()
+    last = _req_cooldown.get(cb.from_user.id, 0)
+    if now - last < 60:
         return await cb.answer(
-            "⏰ This request button has expired. Please search again.",
+            "\u23f3 Please wait 1 minute before sending another request.",
             show_alert=True,
         )
+    _req_cooldown[cb.from_user.id] = now
 
-    query = session.get("query", "")
-    chat_title = session.get("chat_title", "")
-    user = cb.from_user
-    username = f"@{user.username}" if user.username else user.first_name
+    await cb.answer("\u2705 Your request has been sent to the admin!", show_alert=True)
 
-    # Notify LOG_CHANNEL
-    if LOG_CHANNEL:
-        try:
-            await bot.send_message(
-                chat_id=LOG_CHANNEL,
-                text=(
-                    f"#RequestFromYourGroup\n"
-                    f"{html.escape(query)}\n"
-                    f"\U0001f464 {username}"
-                ),
-                disable_web_page_preview=True,
-            )
-        except Exception as e:
-            logger.warning("Failed to send request to LOG_CHANNEL: %s", e)
+    try:
+        movie_name = cb.data.split("#", 1)[1] if "#" in cb.data else "Unknown"
+        user = cb.from_user
+        requester = f"@{user.username}" if user.username else (user.first_name or str(user.id))
+        text = f"#RequestFromYourGroup\n{movie_name}\n\U0001f464 {requester}"
 
-    await cb.answer("✅ Your request has been sent to the admin!", show_alert=True)
+        sent = False
+        if OWNER_ID:
+            try:
+                await bot.send_message(chat_id=OWNER_ID, text=text)
+                sent = True
+            except Exception:
+                pass
+        if LOG_CHANNEL:
+            try:
+                await bot.send_message(chat_id=LOG_CHANNEL, text=text)
+                sent = True
+            except Exception:
+                pass
+        if not sent:
+            logger.warning("request_to_admin: could not deliver request — OWNER_ID and LOG_CHANNEL both failed")
+    except Exception as e:
+        logger.warning("request_to_admin error: %s", e)
