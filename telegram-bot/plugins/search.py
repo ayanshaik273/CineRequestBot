@@ -399,7 +399,7 @@ async def page_cb(bot, cb):
 
 @Client.on_callback_query(filters.regex(r"^req_admin#"), group=-1)
 async def request_to_admin(bot, cb):
-    """Handle 'Request Here' tap — rate-limit, then send #RequestFromYourGroup to OWNER and LOG_CHANNEL."""
+    """Handle 'Request Here' tap — rate-limit, notify owner/log channel."""
     now = time()
     last = _req_cooldown.get(cb.from_user.id, 0)
     if now - last < 60:
@@ -411,26 +411,44 @@ async def request_to_admin(bot, cb):
 
     await cb.answer("\u2705 Your request has been sent to the admin!", show_alert=True)
 
-    try:
-        movie_name = cb.data.split("#", 1)[1] if "#" in cb.data else "Unknown"
-        user = cb.from_user
-        requester = f"@{user.username}" if user.username else (user.first_name or str(user.id))
-        text = f"#RequestFromYourGroup\n{movie_name}\n\U0001f464 {requester}"
+    movie_name = cb.data.split("#", 1)[1] if "#" in cb.data else "Unknown"
+    user = cb.from_user
+    requester = f"@{user.username}" if user.username else (user.first_name or str(user.id))
+    text = f"#RequestFromYourGroup\n{movie_name}\n\U0001f464 {requester}"
 
-        sent = False
-        if OWNER_ID:
-            try:
-                await bot.send_message(chat_id=OWNER_ID, text=text)
-                sent = True
-            except Exception:
-                pass
-        if LOG_CHANNEL:
-            try:
-                await bot.send_message(chat_id=LOG_CHANNEL, text=text)
-                sent = True
-            except Exception:
-                pass
-        if not sent:
-            logger.warning("request_to_admin: could not deliver request — OWNER_ID and LOG_CHANNEL both failed")
-    except Exception as e:
-        logger.warning("request_to_admin error: %s", e)
+    logger.info("REQUEST: movie=%r requester=%s OWNER_ID=%s LOG_CHANNEL=%s",
+                movie_name, requester, OWNER_ID, LOG_CHANNEL)
+
+    sent = False
+
+    # Try owner PM first
+    if OWNER_ID:
+        try:
+            await bot.send_message(chat_id=OWNER_ID, text=text)
+            sent = True
+            logger.info("REQUEST delivered to OWNER_ID=%s", OWNER_ID)
+        except Exception as e:
+            logger.exception("REQUEST: failed to send to OWNER_ID=%s — %s", OWNER_ID, e)
+
+    # Also send to log channel
+    if LOG_CHANNEL:
+        try:
+            await bot.send_message(chat_id=LOG_CHANNEL, text=text)
+            sent = True
+            logger.info("REQUEST delivered to LOG_CHANNEL=%s", LOG_CHANNEL)
+        except Exception as e:
+            logger.exception("REQUEST: failed to send to LOG_CHANNEL=%s — %s", LOG_CHANNEL, e)
+
+    # Fallback: reply in the group so admin never misses it
+    if not sent:
+        logger.warning("REQUEST: PM and LOG_CHANNEL both failed — posting in group as fallback")
+        try:
+            await cb.message.reply_text(
+                f"\U0001f4e9 <b>New Request</b>\n\n"
+                f"\U0001f3ac {movie_name}\n"
+                f"\U0001f464 {requester}\n\n"
+                f"<i>(Admin PM not configured — set OWNER_ID env var on Railway)</i>",
+                parse_mode=enums.ParseMode.HTML,
+            )
+        except Exception as e2:
+            logger.exception("REQUEST: group fallback also failed: %s", e2)
