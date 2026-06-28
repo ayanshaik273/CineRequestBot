@@ -1,3 +1,4 @@
+import html
 from config import LOG_CHANNEL, OWNER_ID
 from utils import script, get_groups, get_users, add_user, get_connected_channels_count
 from pyrogram import Client, filters, ContinuePropagation
@@ -6,7 +7,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @Client.on_message(filters.command("start") & ~filters.channel)
 async def start(bot, message):
-    await add_user(message.from_user.id, message.from_user.first_name)
+    is_new = await add_user(message.from_user.id, message.from_user.first_name)
     await message.reply(
         text=script.START.format(message.from_user.mention),
         disable_web_page_preview=True,
@@ -15,6 +16,21 @@ async def start(bot, message):
              InlineKeyboardButton("ᴀʙᴏᴜᴛ", callback_data="misc_about")],
         ])
     )
+    if LOG_CHANNEL and is_new:
+        try:
+            user = message.from_user
+            username = f"@{user.username}" if user.username else "—"
+            await bot.send_message(
+                chat_id=LOG_CHANNEL,
+                text=(
+                    "#NewUser\n\n"
+                    f"👤 <b>{html.escape(user.first_name or '')}</b>\n"
+                    f"🆔 <code>{user.id}</code>\n"
+                    f"📛 {username}"
+                ),
+            )
+        except Exception:
+            pass
 
 
 @Client.on_message(filters.command("help"))
