@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import html
 import logging
 import uuid
@@ -107,6 +108,14 @@ async def _search_channels(user_client, channels: list, query: str, backup_link:
         except Exception as e:
             logger.debug("Search error ch=%s: %s", ch_id, e)
     return results
+
+
+def _build_request_deep_link(bot_username: str, query: str) -> str:
+    """Build a t.me deep link that opens PM with the bot, pre-filled with the movie request."""
+    # Encode query as base64url (strip padding) so it survives Telegram's start param rules.
+    # Truncate to 45 chars so the full param stays within Telegram's 64-char limit.
+    encoded = base64.urlsafe_b64encode(query[:45].encode()).decode().rstrip("=")
+    return f"https://t.me/{bot_username}?start=req-{encoded}"
 
 
 def _build_page_message(query: str, page_results: list, total: int,
@@ -274,11 +283,14 @@ async def search(bot, message):
         if imdb_hits:
             imdb_text = "\n\n<b>Did you mean:</b>\n"
             imdb_text += "\n".join("\u2022 " + html.escape(h["title"]) for h in imdb_hits[:5])
-        _no_res_kb = None
-        if backup_link:
-            _no_res_kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("\U0001f4e9 Request Here", url=backup_link)
-            ]])
+
+        # Build "Request Here" button — always links to bot PM with movie name pre-filled
+        me = await bot.get_me()
+        req_url = _build_request_deep_link(me.username, query)
+        _no_res_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("\U0001f4e9 Request Here", url=req_url)
+        ]])
+
         await wait_msg.edit(
             "\u274c <b>No results found for:</b> <i>" + html.escape(query) + "</i>"
             + imdb_text + "\n\n<b>Please request the group admin \U0001f447</b>",
