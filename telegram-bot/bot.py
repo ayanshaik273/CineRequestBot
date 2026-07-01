@@ -70,6 +70,15 @@ class Bot(Client):
         await start_daily_summary_scheduler(self)
 
         from pyrogram.types import BotCommand
+        await self.set_bot_description(
+            description=(
+                "ℹ️ This bot is a search tool only. It does not host or distribute any files. "
+                "All results are links to existing public Telegram channels. "
+                "To report a concern: /report"
+            ),
+            language_code="",
+        )
+
         await self.set_bot_commands([
             BotCommand("start",       "Check if I'm alive"),
             BotCommand("id",          "Get channel/group ID"),
