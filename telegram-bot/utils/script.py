@@ -20,17 +20,22 @@ Members can then type any movie or series name — results are delivered private
 /nofsub - Remove force-subscribe
 /autodelete - Set result auto-delete timer (1, 2 or 5 mins)
 /ping - Check bot speed
+/report - Report an issue or content concern
 
 <b>How it works:</b>
 ❶ Add me as admin in your group and content channel.
 ❷ Type /verify in the group — wait for approval.
 ❸ Use <code>/connect -100xxxxxxxxxx</code> to link your channel.
-❹ Members type a movie name → results appear in a private results channel via button."""
+❹ Members type a movie name → results appear in a private results channel via button.
+
+<i>ℹ️ This bot is a search tool only. It does not host or distribute any files. All results are links to existing public Telegram channels.</i>"""
 
     ABOUT = """<b>➣ Bot Name ⋟  {}</b>
 <b>➢ Language ⋟  <a href="https://www.python.org">Python 3</a></b>
 <b>➣ Database ⋟  <a href="https://www.mongodb.com">MongoDB</a></b>
-<b>➢ Framework ⋟  <a href="https://docs.pyrogram.org">Pyrogram</a></b>"""
+<b>➢ Framework ⋟  <a href="https://docs.pyrogram.org">Pyrogram</a></b>
+
+<i>ℹ️ This bot is a search tool only. It does not host, store, or distribute any media files. All results are links to existing public Telegram channels. To report a concern: /report</i>"""
 
     STATS = """<b>📊 Bot Statistics</b>
 
@@ -58,3 +63,17 @@ Failed: {}"""
     PM_REPLY = """<b>Hi! 👋
 
 To search for movies or series, add me to your group and use /verify.</b>"""
+
+    REPORT = """<b>📋 Report a Content Concern</b>
+
+This bot is a <b>search tool only</b> — it does not host or distribute any files.
+All results are links to existing public Telegram channels.
+
+If you have a content concern or copyright issue:
+
+📧 <b>Email:</b> <code>ssthekiller@proton.me</code>
+📝 <b>Include:</b> the content name, the source channel, and your reason.
+
+We review all reports and will disconnect any flagged source channel promptly.
+
+<i>Group admins can also use /disconnect to remove a source channel immediately.</i>"""
