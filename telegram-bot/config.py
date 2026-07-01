@@ -5,11 +5,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-API_ID    = int(os.environ.get("API_ID", 0))
-API_HASH  = os.environ.get("API_HASH", "")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-OWNER_ID  = int(os.environ.get("OWNER_ID", 0))
-LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", 0))
+def _safe_int(v, default=0):
+    try:
+        return int(v) if v and str(v).strip() else default
+    except (ValueError, AttributeError):
+        return default
+
+API_ID      = _safe_int(os.environ.get("API_ID", ""))
+API_HASH    = os.environ.get("API_HASH", "")
+BOT_TOKEN   = os.environ.get("BOT_TOKEN", "")
+OWNER_ID    = _safe_int(os.environ.get("OWNER_ID", ""))
+LOG_CHANNEL = _safe_int(os.environ.get("LOG_CHANNEL", ""))
 
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
