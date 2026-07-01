@@ -7,6 +7,8 @@ from pyrogram.types import ChatPermissions
 
 @Client.on_message(filters.group & filters.command("fsub"))
 async def f_sub_cmd(bot, message):
+    if not message.from_user:
+        return
     m = await message.reply("ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ...")
     try:
         group     = await get_group(message.chat.id)
@@ -55,6 +57,8 @@ async def f_sub_cmd(bot, message):
 
 @Client.on_message(filters.group & filters.command("nofsub"))
 async def nf_sub_cmd(bot, message):
+    if not message.from_user:
+        return
     m = await message.reply("ᴅɪꜱᴀᴛᴛᴀᴄʜɪɴɢ...")
     try:
         group     = await get_group(message.chat.id)
