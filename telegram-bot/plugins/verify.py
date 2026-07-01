@@ -20,6 +20,8 @@ async def _verify(bot, message):
     except Exception:
         return await message.reply(f"{user_name},\nꜱᴛᴀʀᴛ ᴍᴇ ɪɴ ᴘᴍ")
 
+    if not message.from_user:
+        return
     if message.from_user.id != user_id:
         return await message.reply(f"Only {user.mention} can use this command 😁")
     if verified:
