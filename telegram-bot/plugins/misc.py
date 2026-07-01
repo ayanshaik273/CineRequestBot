@@ -16,6 +16,7 @@ async def start(bot, message):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("ʜᴇʟᴘ", callback_data="misc_help"),
              InlineKeyboardButton("ᴀʙᴏᴜᴛ", callback_data="misc_about")],
+            [InlineKeyboardButton("📋 ʀᴇᴘᴏʀᴛ", callback_data="misc_report")],
         ])
     )
     if LOG_CHANNEL and is_new:
@@ -101,6 +102,7 @@ async def misc_cb(bot, update):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("ʜᴇʟᴘ", callback_data="misc_help"),
                  InlineKeyboardButton("ᴀʙᴏᴜᴛ", callback_data="misc_about")],
+                [InlineKeyboardButton("📋 ʀᴇᴘᴏʀᴛ", callback_data="misc_report")],
             ])
         )
     elif data == "help":
@@ -115,6 +117,14 @@ async def misc_cb(bot, update):
         me = await bot.get_me()
         await update.message.edit(
             text=script.ABOUT.format(me.mention),
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("ʙᴀᴄᴋ", callback_data="misc_home"),
+            ]])
+        )
+    elif data == "report":
+        await update.message.edit(
+            text=script.REPORT,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("ʙᴀᴄᴋ", callback_data="misc_home"),
