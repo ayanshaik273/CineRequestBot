@@ -7,6 +7,8 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @Client.on_message(filters.command("start") & ~filters.channel)
 async def start(bot, message):
+    if not message.from_user:
+        return
     is_new = await add_user(message.from_user.id, message.from_user.first_name)
     await message.reply(
         text=script.START.format(message.from_user.mention),
