@@ -56,6 +56,9 @@ def _prune_sessions():
     expired_rl = [k for k, v in _rate_limit.items() if not any(now - t < _RATE_LIMIT_WINDOW for t in v)]
     for k in expired_rl:
         _rate_limit.pop(k, None)
+    expired_rc = [k for k, v in _req_cooldown.items() if now - v > 60]
+    for k in expired_rc:
+        _req_cooldown.pop(k, None)
 
 
 async def _get_backup_link() -> str:
@@ -275,8 +278,10 @@ async def search(bot, message):
             imdb_text = "\n\n<b>Did you mean:</b>\n"
             imdb_text += "\n".join("\u2022 " + html.escape(h["title"]) for h in imdb_hits[:5])
 
-        # Embed query directly in callback_data (first 50 chars) — no session needed
-        safe_query = query[:50]
+        # Slice by bytes to stay within Telegram's 64-byte callback_data limit
+        _cb_prefix = b"req_admin#"
+        _cb_max = 64 - len(_cb_prefix)
+        safe_query = query.encode("utf-8")[:_cb_max].decode("utf-8", errors="ignore")
         _no_res_kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("\U0001f4e9 Request Here", callback_data=f"req_admin#{safe_query}")
         ]])
