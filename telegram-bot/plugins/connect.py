@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 async def _owner_check(bot, message, group):
+    if not message.from_user:
+        return False
     if not group:
         await bot.leave_chat(message.chat.id)
         return False
