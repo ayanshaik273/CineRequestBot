@@ -1,7 +1,7 @@
 import asyncio
 
 from config import LOG_CHANNEL
-from utils import script, add_user
+from utils import script
 from database.db import add_group
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
